@@ -1,11 +1,11 @@
 # CreditIQ — Python Dependencies
 
 # Core API
-fastapi==0.111.0
-uvicorn[standard]==0.29.0
-python-multipart==0.0.9
-pydantic==2.7.1
-python-dotenv==1.0.1
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+python-multipart>=0.0.12
+pydantic>=2.9.0
+python-dotenv>=1.0.1
 
 # LangChain & AI Agent
 langchain>=0.2.0
@@ -18,28 +18,28 @@ openai>=1.30.1
 pinecone-client==3.2.2
 
 # PDF & Document Processing
-pymupdf==1.24.3
-pdfplumber==0.11.0
-openpyxl==3.1.2
-pandas==2.2.2
-numpy==1.26.4
+pymupdf>=1.24.10
+pdfplumber>=0.11.0
+openpyxl>=3.1.2
+pandas>=2.2.3
+numpy>=1.26.4
 
 # Web Search / Crawling
 tavily-python==0.3.3
 
 # ML & Credit Scoring
-xgboost==2.0.3
-scikit-learn==1.4.2
-shap==0.45.1
-imbalanced-learn==0.12.2
-joblib==1.4.2
+xgboost>=2.1.0
+scikit-learn>=1.5.0
+shap>=0.45.1
+imbalanced-learn>=0.12.2
+joblib>=1.4.2
 
 # GAN Synthetic Data
-ctgan==0.10.1
-sdv==1.17.3
+ctgan>=0.11.0
+sdv>=1.18.0
 
 # Time Series
-prophet==1.1.5
+prophet>=1.1.6
 
 # Graph Analytics
 networkx==3.3
