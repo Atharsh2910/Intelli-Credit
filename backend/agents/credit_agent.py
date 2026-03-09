@@ -18,12 +18,19 @@ load_dotenv()
 
 try:
     from langchain_openai import ChatOpenAI
-    from langchain.agents import AgentExecutor, create_openai_tools_agent
-    from langchain.tools import Tool
+    from langchain_classic.agents import AgentExecutor, create_openai_tools_agent
+    from langchain_core.tools import Tool
     from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
     HAS_LANGCHAIN = True
 except ImportError:
-    HAS_LANGCHAIN = False
+    try:
+        from langchain_openai import ChatOpenAI
+        from langchain.agents import AgentExecutor, create_openai_tools_agent
+        from langchain.tools import Tool
+        from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+        HAS_LANGCHAIN = True
+    except ImportError:
+        HAS_LANGCHAIN = False
 
 try:
     from tavily import TavilyClient

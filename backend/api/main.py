@@ -23,7 +23,7 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from backend.ingestion.data_ingestion import IngestionPipeline
-from backend.agents.credit_agent import CreditAgentOrchestrator
+from backend.agents.orchestrator import LangChainCreditOrchestrator
 from backend.decision_engine.engine import CreditDecisionEngine
 from backend.cam_generator.memo_generator import CAMGenerator
 from backend.ml.credit_model import CreditRiskModel, LoanLimitModel, InterestRateModel
@@ -54,7 +54,7 @@ app.add_middleware(
 # ---------------------------------------------------------------------------
 
 ingestion = IngestionPipeline()
-orchestrator = CreditAgentOrchestrator()
+orchestrator = LangChainCreditOrchestrator()
 model_dir = os.path.join(project_root, "backend", "ml", "models")
 decision_engine = CreditDecisionEngine(model_dir)
 cam_generator = CAMGenerator()
