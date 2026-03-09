@@ -2,11 +2,17 @@ services:
   - type: web
     name: intelli-credit-api
     env: python
-    buildCommand: pip install -r requirements.txt
+
+    buildCommand: |
+      pyenv install 3.11.9
+      pyenv global 3.11.9
+      python --version
+      pip install --upgrade pip
+      pip install -r requirements.txt
+
     startCommand: uvicorn backend.api.main:app --host 0.0.0.0 --port $PORT
+
     envVars:
-      - key: PYTHON_VERSION
-        value: 3.11.9
       - key: OPENAI_API_KEY
         sync: false
       - key: PINECONE_API_KEY
