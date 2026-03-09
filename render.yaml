@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: intelli-credit-api
+    name: intelli-credit
     env: python
     plan: free
     runtime: python
