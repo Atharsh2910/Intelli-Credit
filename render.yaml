@@ -5,6 +5,8 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn backend.api.main:app --host 0.0.0.0 --port $PORT
     envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
       - key: OPENAI_API_KEY
         sync: false
       - key: PINECONE_API_KEY
@@ -12,5 +14,3 @@ services:
       - key: TAVILY_API_KEY
         sync: false
       - key: CORS_ORIGINS
-      - key: PYTHON_VERSION
-        value: 3.11.9
