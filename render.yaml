@@ -13,4 +13,4 @@ services:
         sync: false
       - key: CORS_ORIGINS
       - key: PYTHON_VERSION
-        value: 3.11
+        value: 3.11.9
