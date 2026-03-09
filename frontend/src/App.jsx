@@ -24,6 +24,21 @@ const LOADING_PHASES = [
   'Generating Credit Appraisal Memo',
 ]
 
+const Input = ({ label, value, onChange, type = 'text', opts = {} }) => (
+  <div className="form-group">
+    <label>{label}</label>
+    {opts.select ? (
+      <select value={value} onChange={e => onChange(e.target.value)}>
+        {opts.options.map(o => <option key={o} value={o}>{o}</option>)}
+      </select>
+    ) : opts.textarea ? (
+      <textarea value={value} onChange={e => onChange(e.target.value)} placeholder={opts.placeholder || ''} />
+    ) : (
+      <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={opts.placeholder || ''} />
+    )}
+  </div>
+)
+
 export default function App() {
   const [step, setStep] = useState(0)
   const [loading, setLoading] = useState(false)
@@ -97,21 +112,6 @@ export default function App() {
   }
 
   const canProceed = step === 0 ? company.company_name.length > 0 : true
-
-  const Input = ({ label, value, onChange, type = 'text', opts = {} }) => (
-    <div className="form-group">
-      <label>{label}</label>
-      {opts.select ? (
-        <select value={value} onChange={e => onChange(e.target.value)}>
-          {opts.options.map(o => <option key={o} value={o}>{o}</option>)}
-        </select>
-      ) : opts.textarea ? (
-        <textarea value={value} onChange={e => onChange(e.target.value)} placeholder={opts.placeholder || ''} />
-      ) : (
-        <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={opts.placeholder || ''} />
-      )}
-    </div>
-  )
 
   // ─── Page Renderers ───
   const renderCompany = () => (

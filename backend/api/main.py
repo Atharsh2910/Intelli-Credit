@@ -335,6 +335,8 @@ async def full_decision(request: FullDecisionRequest):
 
         # Step 5: Build ML features
         ratios = agent_result.get("financial_analysis", {}).get("ratios", {})
+        research = agent_result.get("research", {})
+        
         features = {
             **ratios,
             "promoter_contribution_pct": fd.promoter_contribution_pct,
@@ -344,11 +346,11 @@ async def full_decision(request: FullDecisionRequest):
             "emi_bounce_count": request.bank_data.emi_bounce_count if request.bank_data else 0,
             "avg_bank_utilisation_pct": request.bank_data.avg_utilisation_pct if request.bank_data else 65,
             "cibil_score": ci.cibil_score,
-            "litigation_count": len(agent_result.get("research", {}).get("litigation_history", [])),
+            "litigation_count": len(research.get("litigation_history", [])),
             "years_in_business": ci.years_in_business,
             "promoter_experience_yrs": ci.promoter_experience_yrs,
             "secondary_research_risk": {"LOW": 0, "MEDIUM": 1, "HIGH": 2}.get(
-                agent_result.get("research", {}).get("overall_risk", "LOW"), 0
+                research.get("overall_risk", "LOW"), 0
             ),
             "sector_outlook_score": 6.0,
             "macro_risk_score": ci.macro_risk_score,

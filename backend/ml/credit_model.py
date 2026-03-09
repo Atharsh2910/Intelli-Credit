@@ -65,6 +65,34 @@ FEATURE_NAMES = [
     "sector_outlook_score", "macro_risk_score",
 ]
 
+# Realistic Fallback Values for SMEs (used when data is missing)
+FALLBACK_VALUES = {
+    "dscr": 1.25,                       # Standard bank requirement is >1.2
+    "interest_coverage_ratio": 2.5,     # Safe coverage
+    "ebitda_margin_pct": 12.0,          # Average SME margin
+    "revenue_growth_3yr_cagr": 8.0,      # Moderate growth
+    "pat_margin_pct": 4.5,              # Typical net profit
+    "debt_equity_ratio": 1.5,           # Normal leverage
+    "tangible_net_worth_cr": 2.0,       # Base net worth
+    "promoter_contribution_pct": 50.0,  # Majority stake
+    "cash_accrual_to_debt": 0.15,       # Decent debt service
+    "current_ratio": 1.4,               # Near the 1.33 classic limit
+    "quick_ratio": 0.9,                 # Conservative liquid ratio
+    "facr": 1.5,                        # Fixed asset coverage
+    "security_coverage": 1.2,           # Collateral margin
+    "gst_compliance_score": 8.5,        # High compliance assumed
+    "gstr_2a_3b_discrepancy_pct": 4.0,  # Minor drift
+    "bank_credit_debit_ratio": 1.05,    # Balanced bank flow
+    "emi_bounce_count": 0,              # Clean repayment
+    "avg_bank_utilisation_pct": 65.0,   # Moderate CC/OD usage
+    "cibil_score": 720,                 # Good credit history
+    "litigation_count": 0,              # No active lawsuits
+    "years_in_business": 10,            # Established SME
+    "promoter_experience_yrs": 12,      # Professional background
+    "secondary_research_risk": 0,       # Low (mapped from category)
+    "sector_outlook_score": 7.0,        # Positive outlook
+    "macro_risk_score": 4.0,            # Moderate macro risk
+}
 
 # ---------------------------------------------------------------------------
 # Ensemble Credit Risk Model
@@ -83,6 +111,7 @@ class CreditRiskModel:
         self.scaler = StandardScaler()
         self.shap_explainer = None
         self.is_trained = False
+        self.features_used = []
         self.training_metrics = {}
 
         # Try to load pre-trained model
@@ -91,9 +120,14 @@ class CreditRiskModel:
     def train(self, data: pd.DataFrame, target_col: str = "default") -> Dict[str, Any]:
         """Train ensemble models on data."""
         # Prepare features
-        feature_cols = [c for c in FEATURE_NAMES if c in data.columns]
-        X = data[feature_cols].copy()
+        self.features_used = [c for c in FEATURE_NAMES if c in data.columns]
+        X = data[self.features_used].copy()
         y = data[target_col].copy()
+
+        # Save metadata for later persistence
+        metadata_path = os.path.join(self.model_dir, "risk_metadata.json")
+        with open(metadata_path, "w") as f:
+            json.dump({"features_used": self.features_used}, f)
 
         # Handle missing values
         X = X.fillna(X.median())
@@ -163,8 +197,8 @@ class CreditRiskModel:
             "default_rate_test": round(float(y_test.mean()), 4),
             "n_train": len(X_train),
             "n_test": len(X_test),
-            "n_features": len(feature_cols),
-            "features_used": feature_cols,
+            "n_features": len(self.features_used),
+            "features_used": self.features_used,
         }
 
         self.training_metrics = metrics
@@ -185,12 +219,17 @@ class CreditRiskModel:
             raise RuntimeError("Model not trained. Run train() or load a pre-trained model.")
 
         # Build feature vector
-        X = pd.DataFrame([features])
-        for col in FEATURE_NAMES:
-            if col not in X.columns:
-                X[col] = 0.0
+        processed_features = {}
+        for col in self.features_used:
+            val = features.get(col)
+            # Apply fallback if missing or zero (for critical ratios)
+            if val is None or (val == 0 and col in ["dscr", "current_ratio", "quick_ratio"]):
+                processed_features[col] = FALLBACK_VALUES.get(col, 0.0)
+            else:
+                processed_features[col] = val
 
-        X = X[FEATURE_NAMES].fillna(0)
+        X = pd.DataFrame([processed_features])
+        X = X[self.features_used]  # Ensure order
         X_scaled = self.scaler.transform(X)
 
         # Ensemble prediction
@@ -303,9 +342,18 @@ class CreditRiskModel:
         with open(os.path.join(self.model_dir, "metrics.json"), "w") as f:
             json.dump(self.training_metrics, f, indent=2)
 
-    def _try_load(self) -> None:
+    def _try_load(self):
         """Try to load pre-trained models."""
         try:
+            # Load metadata
+            metadata_path = os.path.join(self.model_dir, "risk_metadata.json")
+            if os.path.exists(metadata_path):
+                with open(metadata_path, "r") as f:
+                    meta = json.load(f)
+                    self.features_used = meta.get("features_used", FEATURE_NAMES)
+            else:
+                self.features_used = FEATURE_NAMES
+
             xgb_path = os.path.join(self.model_dir, "xgb_model.pkl")
             scaler_path = os.path.join(self.model_dir, "scaler.pkl")
             if os.path.exists(xgb_path) and os.path.exists(scaler_path):
@@ -350,12 +398,18 @@ class LoanLimitModel:
 
     def train(self, data: pd.DataFrame) -> Dict[str, Any]:
         """Train loan limit models."""
+        # Define consistent feature set
         feature_cols = [c for c in FEATURE_NAMES if c in data.columns]
-        # Additional features for loan sizing
-        extra_cols = ["revenue_cr", "tangible_net_worth_cr"]
-        all_cols = [c for c in feature_cols + extra_cols if c in data.columns]
+        if "revenue_cr" in data.columns and "revenue_cr" not in feature_cols:
+            feature_cols.append("revenue_cr")
+        
+        # Store features used for prediction alignment
+        self.features_used = feature_cols
+        metadata_path = os.path.join(self.model_dir, "loan_metadata.json")
+        with open(metadata_path, "w") as f:
+            json.dump({"features_used": self.features_used}, f)
 
-        X = data[all_cols].fillna(0)
+        X = data[self.features_used].fillna(0)
         y = data["loan_amount_cr"]
 
         X_scaled = self.scaler.fit_transform(X)
@@ -390,12 +444,19 @@ class LoanLimitModel:
         if not self.is_trained:
             return self._heuristic_predict(features)
 
-        X = pd.DataFrame([features])
-        all_cols = FEATURE_NAMES + ["revenue_cr"]
-        for col in all_cols:
-            if col not in X.columns:
-                X[col] = 0.0
-        X = X[[c for c in all_cols if c in X.columns]].fillna(0)
+        # Build feature vector with exactly the same columns/order as training
+        processed_features = {}
+        for col in self.features_used:
+            val = features.get(col)
+            if val is None or (val == 0 and col in ["dscr", "current_ratio"]):
+                processed_features[col] = FALLBACK_VALUES.get(col, 0.1) # MinRev for loan
+                if col == "revenue_cr":
+                    processed_features[col] = features.get("revenue_cr", 1.0)
+            else:
+                processed_features[col] = val
+
+        X = pd.DataFrame([processed_features])
+        X = X[self.features_used].fillna(0)
         X_scaled = self.scaler.transform(X)
 
         return float(max(0.1, self._ensemble_predict(X_scaled)[0]))
@@ -430,7 +491,17 @@ class LoanLimitModel:
         joblib.dump(self.scaler, os.path.join(self.model_dir, "loan_scaler.pkl"))
 
     def _try_load(self):
+        """Load model and metadata."""
         try:
+            # Load metadata
+            metadata_path = os.path.join(self.model_dir, "loan_metadata.json")
+            if os.path.exists(metadata_path):
+                with open(metadata_path, "r") as f:
+                    meta = json.load(f)
+                    self.features_used = meta.get("features_used", FEATURE_NAMES + ["revenue_cr"])
+            else:
+                self.features_used = FEATURE_NAMES + ["revenue_cr"]
+
             gb_path = os.path.join(self.model_dir, "loan_gb_model.pkl")
             scaler_path = os.path.join(self.model_dir, "loan_scaler.pkl")
             if os.path.exists(gb_path) and os.path.exists(scaler_path):
@@ -462,7 +533,13 @@ class InterestRateModel:
     def train(self, data: pd.DataFrame) -> Dict[str, Any]:
         """Train interest rate models."""
         feature_cols = [c for c in FEATURE_NAMES if c in data.columns]
-        X = data[feature_cols].fillna(0)
+        self.features_used = feature_cols
+        
+        metadata_path = os.path.join(self.model_dir, "rate_metadata.json")
+        with open(metadata_path, "w") as f:
+            json.dump({"features_used": self.features_used}, f)
+
+        X = data[self.features_used].fillna(0)
         y = data["interest_rate_pct"]
 
         X_scaled = self.scaler.fit_transform(X)
@@ -494,11 +571,16 @@ class InterestRateModel:
         if not self.is_trained:
             return self._heuristic_predict(features)
 
-        X = pd.DataFrame([features])
-        for col in FEATURE_NAMES:
-            if col not in X.columns:
-                X[col] = 0.0
-        X = X[FEATURE_NAMES].fillna(0)
+        processed_features = {}
+        for col in self.features_used:
+            val = features.get(col)
+            if val is None:
+                processed_features[col] = FALLBACK_VALUES.get(col, 12.0)
+            else:
+                processed_features[col] = val
+
+        X = pd.DataFrame([processed_features])
+        X = X[self.features_used].fillna(0)
         X_scaled = self.scaler.transform(X)
 
         rate = float(self._ensemble_predict(X_scaled)[0])
@@ -540,7 +622,17 @@ class InterestRateModel:
         joblib.dump(self.scaler, os.path.join(self.model_dir, "rate_scaler.pkl"))
 
     def _try_load(self):
+        """Load model and metadata."""
         try:
+            # Load metadata
+            metadata_path = os.path.join(self.model_dir, "rate_metadata.json")
+            if os.path.exists(metadata_path):
+                with open(metadata_path, "r") as f:
+                    meta = json.load(f)
+                    self.features_used = meta.get("features_used", FEATURE_NAMES)
+            else:
+                self.features_used = FEATURE_NAMES
+
             ridge_path = os.path.join(self.model_dir, "rate_ridge_model.pkl")
             scaler_path = os.path.join(self.model_dir, "rate_scaler.pkl")
             if os.path.exists(ridge_path) and os.path.exists(scaler_path):

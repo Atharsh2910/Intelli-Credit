@@ -1,9 +1,9 @@
 {
-  "auc_roc": 0.5729,
-  "accuracy": 0.792,
-  "default_rate_train": 0.2856,
-  "default_rate_test": 0.2,
-  "n_train": 4478,
+  "auc_roc": 0.7519,
+  "accuracy": 0.83,
+  "default_rate_train": 0.2857,
+  "default_rate_test": 0.193,
+  "n_train": 4519,
   "n_test": 1000,
   "n_features": 25,
   "features_used": [
