@@ -1,0 +1,48 @@
+{
+  "credit_risk": {
+    "auc_roc": 0.5729,
+    "accuracy": 0.792,
+    "default_rate_train": 0.2856,
+    "default_rate_test": 0.2,
+    "n_train": 4478,
+    "n_test": 1000,
+    "n_features": 25,
+    "features_used": [
+      "dscr",
+      "interest_coverage_ratio",
+      "ebitda_margin_pct",
+      "revenue_growth_3yr_cagr",
+      "pat_margin_pct",
+      "debt_equity_ratio",
+      "tangible_net_worth_cr",
+      "promoter_contribution_pct",
+      "cash_accrual_to_debt",
+      "current_ratio",
+      "quick_ratio",
+      "facr",
+      "security_coverage",
+      "gst_compliance_score",
+      "gstr_2a_3b_discrepancy_pct",
+      "bank_credit_debit_ratio",
+      "emi_bounce_count",
+      "avg_bank_utilisation_pct",
+      "cibil_score",
+      "litigation_count",
+      "years_in_business",
+      "promoter_experience_yrs",
+      "secondary_research_risk",
+      "sector_outlook_score",
+      "macro_risk_score"
+    ]
+  },
+  "loan_limit": {
+    "rmse": 6.6897,
+    "mae": 3.4986,
+    "r2": 0.8538
+  },
+  "interest_rate": {
+    "rmse": 1.0205,
+    "mae": 0.8098,
+    "r2": 0.4466
+  }
+}
