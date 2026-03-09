@@ -2,14 +2,11 @@ services:
   - type: web
     name: intelli-credit-api
     env: python
+    plan: free
+    runtime: python
+    pythonVersion: 3.11.9
 
-    buildCommand: |
-      pyenv install 3.11.9
-      pyenv global 3.11.9
-      python --version
-      pip install --upgrade pip
-      pip install -r requirements.txt
-
+    buildCommand: pip install -r requirements.txt
     startCommand: uvicorn backend.api.main:app --host 0.0.0.0 --port $PORT
 
     envVars:
