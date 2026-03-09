@@ -6,6 +6,7 @@ Intelli-Credit: FastAPI Backend
 import os
 import sys
 import json
+import logging
 import traceback
 from typing import Dict, List, Optional, Any
 from datetime import datetime
@@ -17,18 +18,14 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Configure logging so we can see errors on Render
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 # Add project root to path
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
-
-from backend.ingestion.data_ingestion import IngestionPipeline
-from backend.agents.orchestrator import LangChainCreditOrchestrator
-from backend.decision_engine.engine import CreditDecisionEngine
-from backend.cam_generator.memo_generator import CAMGenerator
-from backend.ml.credit_model import CreditRiskModel, LoanLimitModel, InterestRateModel
-from backend.fraud_graph.graph_analytics import FraudGraphAnalyzer
-from backend.rag.document_intelligence import DocumentIntelligence
 
 # ---------------------------------------------------------------------------
 # App Setup
@@ -50,16 +47,16 @@ app.add_middleware(
 )
 
 # ---------------------------------------------------------------------------
-# Service Instances
+# Service Instances (initialized in startup event to avoid port-bind failures)
 # ---------------------------------------------------------------------------
 
-ingestion = IngestionPipeline()
-orchestrator = LangChainCreditOrchestrator()
+ingestion = None
+orchestrator = None
+decision_engine = None
+cam_generator = None
+doc_intelligence = None
+fraud_analyzer = None
 model_dir = os.path.join(project_root, "backend", "ml", "models")
-decision_engine = CreditDecisionEngine(model_dir)
-cam_generator = CAMGenerator()
-doc_intelligence = DocumentIntelligence()
-fraud_analyzer = FraudGraphAnalyzer()
 
 
 # ---------------------------------------------------------------------------
@@ -426,9 +423,63 @@ async def generate_memo(request: FullDecisionRequest):
 
 @app.on_event("startup")
 async def startup():
-    """Check if models are loaded."""
-    if not decision_engine.risk_model.is_trained:
-        print("⚠️  ML models not found. Run 'python scripts/train_model.py' to train.")
+    """Initialize all services after the server has bound the port."""
+    global ingestion, orchestrator, decision_engine, cam_generator, doc_intelligence, fraud_analyzer
+
+    logger.info("🔄 Initializing services...")
+
+    try:
+        from backend.ingestion.data_ingestion import IngestionPipeline
+        ingestion = IngestionPipeline()
+        logger.info("✅ IngestionPipeline ready")
+    except Exception as e:
+        logger.error(f"❌ IngestionPipeline failed: {e}")
+        traceback.print_exc()
+
+    try:
+        from backend.agents.orchestrator import LangChainCreditOrchestrator
+        orchestrator = LangChainCreditOrchestrator()
+        logger.info("✅ Orchestrator ready")
+    except Exception as e:
+        logger.error(f"❌ Orchestrator failed: {e}")
+        traceback.print_exc()
+
+    try:
+        from backend.decision_engine.engine import CreditDecisionEngine
+        decision_engine = CreditDecisionEngine(model_dir)
+        logger.info("✅ DecisionEngine ready")
+    except Exception as e:
+        logger.error(f"❌ DecisionEngine failed: {e}")
+        traceback.print_exc()
+
+    try:
+        from backend.cam_generator.memo_generator import CAMGenerator
+        cam_generator = CAMGenerator()
+        logger.info("✅ CAMGenerator ready")
+    except Exception as e:
+        logger.error(f"❌ CAMGenerator failed: {e}")
+        traceback.print_exc()
+
+    try:
+        from backend.rag.document_intelligence import DocumentIntelligence
+        doc_intelligence = DocumentIntelligence()
+        logger.info("✅ DocumentIntelligence ready")
+    except Exception as e:
+        logger.error(f"❌ DocumentIntelligence failed: {e}")
+        traceback.print_exc()
+
+    try:
+        from backend.fraud_graph.graph_analytics import FraudGraphAnalyzer
+        fraud_analyzer = FraudGraphAnalyzer()
+        logger.info("✅ FraudGraphAnalyzer ready")
+    except Exception as e:
+        logger.error(f"❌ FraudGraphAnalyzer failed: {e}")
+        traceback.print_exc()
+
+    # Check ML models
+    if decision_engine and hasattr(decision_engine, 'risk_model') and decision_engine.risk_model.is_trained:
+        logger.info("✅ ML models loaded successfully.")
     else:
-        print("✅ ML models loaded successfully.")
-    print("🚀 Intelli-Credit API is ready.")
+        logger.warning("⚠️  ML models not found. Run 'python scripts/train_model.py' to train.")
+
+    logger.info("🚀 Intelli-Credit API is ready.")
