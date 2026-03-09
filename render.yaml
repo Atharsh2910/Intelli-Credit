@@ -12,4 +12,5 @@ services:
       - key: TAVILY_API_KEY
         sync: false
       - key: CORS_ORIGINS
-        value: https://intelli-credit.vercel.app
+      - key: PYTHON_VERSION
+        value: 3.11
