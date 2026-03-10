@@ -56,6 +56,7 @@ decision_engine = None
 cam_generator = None
 doc_intelligence = None
 fraud_analyzer = None
+services_ready = False
 model_dir = os.path.join(project_root, "backend", "ml", "models")
 
 
@@ -67,6 +68,7 @@ class HealthResponse(BaseModel):
     status: str
     timestamp: str
     models_loaded: bool
+    services_ready: bool = False
     version: str = "1.0.0"
 
 
@@ -174,10 +176,18 @@ class MLFeatures(BaseModel):
 
 @app.get("/api/health", response_model=HealthResponse)
 async def health_check():
+    models_loaded = False
+    try:
+        if decision_engine and hasattr(decision_engine, 'risk_model'):
+            models_loaded = decision_engine.risk_model.is_trained
+    except Exception:
+        pass
+
     return HealthResponse(
-        status="healthy",
+        status="healthy" if services_ready else "initializing",
         timestamp=datetime.now().isoformat(),
-        models_loaded=decision_engine.risk_model.is_trained,
+        models_loaded=models_loaded,
+        services_ready=services_ready,
     )
 
 
@@ -421,10 +431,36 @@ async def generate_memo(request: FullDecisionRequest):
 # Startup
 # ---------------------------------------------------------------------------
 
-@app.on_event("startup")
-async def startup():
-    """Initialize all services after the server has bound the port."""
-    global ingestion, orchestrator, decision_engine, cam_generator, doc_intelligence, fraud_analyzer
+def _init_with_timeout(name, factory, timeout=120):
+    """Run a service factory with a timeout so a hanging call can't block forever."""
+    import threading
+    result = [None]
+    error = [None]
+
+    def target():
+        try:
+            result[0] = factory()
+        except Exception as e:
+            error[0] = e
+
+    t = threading.Thread(target=target, daemon=True)
+    t.start()
+    t.join(timeout=timeout)
+
+    if t.is_alive():
+        logger.error(f"❌ {name} timed out after {timeout}s — skipping")
+        return None
+    if error[0]:
+        logger.error(f"❌ {name} failed: {error[0]}")
+        traceback.print_exc()
+        return None
+    return result[0]
+
+
+def _init_services():
+    """Initialize all services (runs in background thread to not block port binding)."""
+    global ingestion, orchestrator, decision_engine, cam_generator
+    global doc_intelligence, fraud_analyzer, services_ready
 
     logger.info("🔄 Initializing services...")
 
@@ -436,10 +472,14 @@ async def startup():
         logger.error(f"❌ IngestionPipeline failed: {e}")
         traceback.print_exc()
 
+    # Orchestrator may hang on Pinecone/network calls — use timeout
     try:
         from backend.agents.orchestrator import LangChainCreditOrchestrator
-        orchestrator = LangChainCreditOrchestrator()
-        logger.info("✅ Orchestrator ready")
+        orchestrator = _init_with_timeout(
+            "Orchestrator", LangChainCreditOrchestrator, timeout=120
+        )
+        if orchestrator:
+            logger.info("✅ Orchestrator ready")
     except Exception as e:
         logger.error(f"❌ Orchestrator failed: {e}")
         traceback.print_exc()
@@ -482,4 +522,17 @@ async def startup():
     else:
         logger.warning("⚠️  ML models not found. Run 'python scripts/train_model.py' to train.")
 
+    services_ready = True
     logger.info("🚀 Intelli-Credit API is ready.")
+
+
+@app.on_event("startup")
+async def startup():
+    """
+    Kick off service initialization in a background thread so that
+    uvicorn can bind the port immediately.  Render requires the port
+    to be open within ~60 s or it declares 'no open port found'.
+    """
+    import asyncio
+    loop = asyncio.get_event_loop()
+    loop.run_in_executor(None, _init_services)
