@@ -65,10 +65,11 @@ model_dir = os.path.join(project_root, "backend", "ml", "models")
 # ---------------------------------------------------------------------------
 
 class HealthResponse(BaseModel):
-    status: str
+    status: str  # "healthy", "degraded", or "initializing"
     timestamp: str
     models_loaded: bool
     services_ready: bool = False
+    services: Dict[str, bool] = {}
     version: str = "1.0.0"
 
 
@@ -183,11 +184,29 @@ async def health_check():
     except Exception:
         pass
 
+    # Report exactly which services are up and which are down
+    svc_status = {
+        "ingestion": ingestion is not None,
+        "orchestrator": orchestrator is not None,
+        "decision_engine": decision_engine is not None,
+        "cam_generator": cam_generator is not None,
+        "doc_intelligence": doc_intelligence is not None,
+        "fraud_analyzer": fraud_analyzer is not None,
+    }
+
+    if not services_ready:
+        status = "initializing"
+    elif all(svc_status.values()):
+        status = "healthy"
+    else:
+        status = "degraded"
+
     return HealthResponse(
-        status="healthy" if services_ready else "initializing",
+        status=status,
         timestamp=datetime.now().isoformat(),
         models_loaded=models_loaded,
         services_ready=services_ready,
+        services=svc_status,
     )
 
 
