@@ -39,18 +39,40 @@ class DocumentIntelligence:
         self._local_store: List[Dict] = []  # Fallback in-memory store
 
     def _init_clients(self):
+        import time
+        import logging
+        log = logging.getLogger(__name__)
+
         if HAS_OPENAI and os.getenv("OPENAI_API_KEY"):
             self.openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            log.info("  OpenAI client created")
 
         if HAS_PINECONE and os.getenv("PINECONE_API_KEY"):
             try:
+                t0 = time.time()
+                log.info("  Pinecone: creating client...")
                 pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
+                log.info(f"  Pinecone: client created in {time.time()-t0:.1f}s")
+
+                t1 = time.time()
+                log.info("  Pinecone: listing indexes...")
                 index_name = os.getenv("PINECONE_INDEX_NAME", "intelli-credit")
                 existing = [i.name for i in pc.list_indexes()]
+                log.info(f"  Pinecone: list_indexes returned {existing} in {time.time()-t1:.1f}s")
+
                 if index_name in existing:
+                    t2 = time.time()
                     self.pinecone_index = pc.Index(index_name)
-            except Exception:
-                pass
+                    log.info(f"  Pinecone: connected to '{index_name}' in {time.time()-t2:.1f}s")
+                else:
+                    log.warning(f"  Pinecone: index '{index_name}' not found in {existing}")
+            except Exception as e:
+                log.error(f"  Pinecone connection failed: {e}")
+        else:
+            if not HAS_PINECONE:
+                log.info("  Pinecone: package not installed, using local fallback")
+            elif not os.getenv("PINECONE_API_KEY"):
+                log.info("  Pinecone: PINECONE_API_KEY not set, using local fallback")
 
     def generate_embeddings(self, texts: List[str]) -> List[List[float]]:
         """Generate embeddings using OpenAI or fallback."""

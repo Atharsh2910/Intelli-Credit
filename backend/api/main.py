@@ -450,97 +450,83 @@ async def generate_memo(request: FullDecisionRequest):
 # Startup
 # ---------------------------------------------------------------------------
 
-def _init_with_timeout(name, factory, timeout=120):
-    """Run a service factory with a timeout so a hanging call can't block forever."""
-    import threading
-    result = [None]
-    error = [None]
-
-    def target():
-        try:
-            result[0] = factory()
-        except Exception as e:
-            error[0] = e
-
-    t = threading.Thread(target=target, daemon=True)
-    t.start()
-    t.join(timeout=timeout)
-
-    if t.is_alive():
-        logger.error(f"❌ {name} timed out after {timeout}s — skipping")
-        return None
-    if error[0]:
-        logger.error(f"❌ {name} failed: {error[0]}")
-        traceback.print_exc()
-        return None
-    return result[0]
-
-
 def _init_services():
     """Initialize all services (runs in background thread to not block port binding)."""
+    import time
     global ingestion, orchestrator, decision_engine, cam_generator
     global doc_intelligence, fraud_analyzer, services_ready
 
+    t_total = time.time()
     logger.info("🔄 Initializing services...")
 
-    # -- IngestionPipeline (local only, should be fast) --
+    # -- 1. IngestionPipeline (local only, should be fast) --
     try:
+        t = time.time()
         from backend.ingestion.data_ingestion import IngestionPipeline
-        ingestion = _init_with_timeout("IngestionPipeline", IngestionPipeline, timeout=60)
-        if ingestion:
-            logger.info("✅ IngestionPipeline ready")
+        logger.info(f"  IngestionPipeline: import took {time.time()-t:.1f}s")
+        t = time.time()
+        ingestion = IngestionPipeline()
+        logger.info(f"✅ IngestionPipeline ready ({time.time()-t:.1f}s init)")
     except Exception as e:
         logger.error(f"❌ IngestionPipeline failed: {e}")
         traceback.print_exc()
 
-    # -- Orchestrator (creates DocumentIntelligence internally → Pinecone call) --
+    # -- 2. Orchestrator (imports langchain + credit agents, creates DocumentIntelligence → Pinecone) --
     try:
+        t = time.time()
         from backend.agents.orchestrator import LangChainCreditOrchestrator
-        orchestrator = _init_with_timeout("Orchestrator", LangChainCreditOrchestrator, timeout=120)
-        if orchestrator:
-            logger.info("✅ Orchestrator ready")
+        logger.info(f"  Orchestrator: import took {time.time()-t:.1f}s")
+        t = time.time()
+        orchestrator = LangChainCreditOrchestrator()
+        logger.info(f"✅ Orchestrator ready ({time.time()-t:.1f}s init)")
     except Exception as e:
         logger.error(f"❌ Orchestrator failed: {e}")
         traceback.print_exc()
 
-    # -- DecisionEngine (loads ML models, heavy imports) --
+    # -- 3. DecisionEngine (loads ML models from disk) --
     try:
+        t = time.time()
         from backend.decision_engine.engine import CreditDecisionEngine
-        decision_engine = _init_with_timeout(
-            "DecisionEngine", lambda: CreditDecisionEngine(model_dir), timeout=120
-        )
-        if decision_engine:
-            logger.info("✅ DecisionEngine ready")
+        logger.info(f"  DecisionEngine: import took {time.time()-t:.1f}s")
+        t = time.time()
+        decision_engine = CreditDecisionEngine(model_dir)
+        logger.info(f"✅ DecisionEngine ready ({time.time()-t:.1f}s init)")
     except Exception as e:
         logger.error(f"❌ DecisionEngine failed: {e}")
         traceback.print_exc()
 
-    # -- CAMGenerator (lightweight, just creates OpenAI client) --
+    # -- 4. CAMGenerator (lightweight, just creates OpenAI client) --
     try:
+        t = time.time()
         from backend.cam_generator.memo_generator import CAMGenerator
-        cam_generator = _init_with_timeout("CAMGenerator", CAMGenerator, timeout=30)
-        if cam_generator:
-            logger.info("✅ CAMGenerator ready")
+        cam_generator = CAMGenerator()
+        logger.info(f"✅ CAMGenerator ready ({time.time()-t:.1f}s)")
     except Exception as e:
         logger.error(f"❌ CAMGenerator failed: {e}")
         traceback.print_exc()
 
-    # -- DocumentIntelligence (Pinecone connection → can hang) --
+    # -- 5. DocumentIntelligence --
+    # The Orchestrator already creates one internally (orchestrator.doc_intelligence).
+    # Re-use it if available, otherwise create a fresh one.
     try:
-        from backend.rag.document_intelligence import DocumentIntelligence
-        doc_intelligence = _init_with_timeout("DocumentIntelligence", DocumentIntelligence, timeout=60)
-        if doc_intelligence:
-            logger.info("✅ DocumentIntelligence ready")
+        if orchestrator and hasattr(orchestrator, 'doc_intelligence') and orchestrator.doc_intelligence:
+            doc_intelligence = orchestrator.doc_intelligence
+            logger.info("✅ DocumentIntelligence reused from Orchestrator")
+        else:
+            t = time.time()
+            from backend.rag.document_intelligence import DocumentIntelligence
+            doc_intelligence = DocumentIntelligence()
+            logger.info(f"✅ DocumentIntelligence ready ({time.time()-t:.1f}s)")
     except Exception as e:
         logger.error(f"❌ DocumentIntelligence failed: {e}")
         traceback.print_exc()
 
-    # -- FraudGraphAnalyzer (local only, NetworkX graph) --
+    # -- 6. FraudGraphAnalyzer (local only, NetworkX graph) --
     try:
+        t = time.time()
         from backend.fraud_graph.graph_analytics import FraudGraphAnalyzer
-        fraud_analyzer = _init_with_timeout("FraudGraphAnalyzer", FraudGraphAnalyzer, timeout=30)
-        if fraud_analyzer:
-            logger.info("✅ FraudGraphAnalyzer ready")
+        fraud_analyzer = FraudGraphAnalyzer()
+        logger.info(f"✅ FraudGraphAnalyzer ready ({time.time()-t:.1f}s)")
     except Exception as e:
         logger.error(f"❌ FraudGraphAnalyzer failed: {e}")
         traceback.print_exc()
@@ -552,7 +538,7 @@ def _init_services():
         logger.warning("⚠️  ML models not found. Run 'python scripts/train_model.py' to train.")
 
     services_ready = True
-    logger.info("🚀 Intelli-Credit API is ready.")
+    logger.info(f"🚀 Intelli-Credit API is ready. Total init: {time.time()-t_total:.1f}s")
 
 
 @app.on_event("startup")
@@ -565,3 +551,4 @@ async def startup():
     import asyncio
     loop = asyncio.get_event_loop()
     loop.run_in_executor(None, _init_services)
+
