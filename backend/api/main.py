@@ -464,54 +464,64 @@ def _init_services():
 
     logger.info("🔄 Initializing services...")
 
+    # -- IngestionPipeline (local only, should be fast) --
     try:
         from backend.ingestion.data_ingestion import IngestionPipeline
-        ingestion = IngestionPipeline()
-        logger.info("✅ IngestionPipeline ready")
+        ingestion = _init_with_timeout("IngestionPipeline", IngestionPipeline, timeout=60)
+        if ingestion:
+            logger.info("✅ IngestionPipeline ready")
     except Exception as e:
         logger.error(f"❌ IngestionPipeline failed: {e}")
         traceback.print_exc()
 
-    # Orchestrator may hang on Pinecone/network calls — use timeout
+    # -- Orchestrator (creates DocumentIntelligence internally → Pinecone call) --
     try:
         from backend.agents.orchestrator import LangChainCreditOrchestrator
-        orchestrator = _init_with_timeout(
-            "Orchestrator", LangChainCreditOrchestrator, timeout=120
-        )
+        orchestrator = _init_with_timeout("Orchestrator", LangChainCreditOrchestrator, timeout=120)
         if orchestrator:
             logger.info("✅ Orchestrator ready")
     except Exception as e:
         logger.error(f"❌ Orchestrator failed: {e}")
         traceback.print_exc()
 
+    # -- DecisionEngine (loads ML models, heavy imports) --
     try:
         from backend.decision_engine.engine import CreditDecisionEngine
-        decision_engine = CreditDecisionEngine(model_dir)
-        logger.info("✅ DecisionEngine ready")
+        decision_engine = _init_with_timeout(
+            "DecisionEngine", lambda: CreditDecisionEngine(model_dir), timeout=120
+        )
+        if decision_engine:
+            logger.info("✅ DecisionEngine ready")
     except Exception as e:
         logger.error(f"❌ DecisionEngine failed: {e}")
         traceback.print_exc()
 
+    # -- CAMGenerator (lightweight, just creates OpenAI client) --
     try:
         from backend.cam_generator.memo_generator import CAMGenerator
-        cam_generator = CAMGenerator()
-        logger.info("✅ CAMGenerator ready")
+        cam_generator = _init_with_timeout("CAMGenerator", CAMGenerator, timeout=30)
+        if cam_generator:
+            logger.info("✅ CAMGenerator ready")
     except Exception as e:
         logger.error(f"❌ CAMGenerator failed: {e}")
         traceback.print_exc()
 
+    # -- DocumentIntelligence (Pinecone connection → can hang) --
     try:
         from backend.rag.document_intelligence import DocumentIntelligence
-        doc_intelligence = DocumentIntelligence()
-        logger.info("✅ DocumentIntelligence ready")
+        doc_intelligence = _init_with_timeout("DocumentIntelligence", DocumentIntelligence, timeout=60)
+        if doc_intelligence:
+            logger.info("✅ DocumentIntelligence ready")
     except Exception as e:
         logger.error(f"❌ DocumentIntelligence failed: {e}")
         traceback.print_exc()
 
+    # -- FraudGraphAnalyzer (local only, NetworkX graph) --
     try:
         from backend.fraud_graph.graph_analytics import FraudGraphAnalyzer
-        fraud_analyzer = FraudGraphAnalyzer()
-        logger.info("✅ FraudGraphAnalyzer ready")
+        fraud_analyzer = _init_with_timeout("FraudGraphAnalyzer", FraudGraphAnalyzer, timeout=30)
+        if fraud_analyzer:
+            logger.info("✅ FraudGraphAnalyzer ready")
     except Exception as e:
         logger.error(f"❌ FraudGraphAnalyzer failed: {e}")
         traceback.print_exc()
