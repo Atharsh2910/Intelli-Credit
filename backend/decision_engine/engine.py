@@ -10,7 +10,6 @@ from backend.ml.credit_model import CreditRiskModel, LoanLimitModel, InterestRat
 
 
 class CreditDecisionEngine:
-    """Produces ML-driven credit decisions."""
 
     def __init__(self, model_dir: str = None):
         self.risk_model = CreditRiskModel(model_dir)

@@ -13,6 +13,7 @@ from datetime import datetime
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 
@@ -56,6 +57,10 @@ decision_engine = None
 cam_generator = None
 doc_intelligence = None
 fraud_analyzer = None
+doc_classifier = None
+schema_manager = None
+swot_analyzer = None
+genai_narrative = None
 services_ready = False
 model_dir = os.path.join(project_root, "backend", "ml", "models")
 
@@ -390,12 +395,20 @@ async def full_decision(request: FullDecisionRequest):
         # Step 7: Generate CAM
         cam = cam_generator.generate(ml_decision, agent_result, company_dict)
 
+        # Step 8: SWOT Analysis
+        swot = swot_analyzer.generate(agent_result, ml_decision, company_dict)
+
+        # Step 9: GenAI Narrative
+        narrative = genai_narrative.generate(agent_result, ml_decision, company_dict)
+
         return {
             "status": "success",
             "data": {
                 "decision": ml_decision,
                 "agent_analysis": agent_result,
                 "cam": cam,
+                "swot_analysis": swot,
+                "genai_narrative": narrative,
             }
         }
     except Exception as e:
@@ -447,6 +460,122 @@ async def generate_memo(request: FullDecisionRequest):
 
 
 # ---------------------------------------------------------------------------
+# New Feature Endpoints
+# ---------------------------------------------------------------------------
+
+@app.post("/api/classify")
+async def classify_documents(
+    files: List[UploadFile] = File(...),
+):
+    """Auto-classify uploaded documents with confidence scores."""
+    try:
+        classifications = []
+        for file in files:
+            file_bytes = await file.read()
+            result = doc_classifier.classify_from_bytes(file_bytes, file.filename)
+            from dataclasses import asdict
+            classifications.append(asdict(result))
+        return {"status": "success", "data": {"classifications": classifications, "doc_types": doc_classifier.get_doc_types()}}
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class ClassificationConfirmation(BaseModel):
+    filename: str
+    confirmed_type: str
+
+
+@app.post("/api/classify/confirm")
+async def confirm_classifications(confirmations: List[ClassificationConfirmation]):
+    """Accept user-confirmed or edited classifications."""
+    try:
+        confirmed = []
+        for c in confirmations:
+            confirmed.append({
+                "filename": c.filename,
+                "confirmed_type": c.confirmed_type,
+            })
+        return {"status": "success", "data": {"confirmed": confirmed}}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/schema/defaults")
+async def get_default_schemas():
+    """Return default extraction schemas for all document types."""
+    try:
+        schemas = schema_manager.get_all_schemas()
+        return {"status": "success", "data": schemas}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class CustomSchemaRequest(BaseModel):
+    doc_type: str
+    fields: List[Dict[str, Any]]
+
+
+@app.post("/api/schema/custom")
+async def set_custom_schema(request: CustomSchemaRequest):
+    """Set a custom extraction schema for a document type."""
+    try:
+        result = schema_manager.set_custom_schema(request.doc_type, request.fields)
+        return {"status": "success", "data": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/report/download")
+async def download_report(request: FullDecisionRequest):
+    """Generate and download a PDF Credit Appraisal Memo."""
+    try:
+        ci = request.company_info
+        fd = request.financial_data
+        financial_dict = fd.model_dump()
+
+        agent_result = orchestrator.run_full_analysis(
+            company_info=ci.model_dump(),
+            financial_data=financial_dict,
+        )
+
+        ratios = agent_result.get("financial_analysis", {}).get("ratios", {})
+        features = {
+            **ratios,
+            "cibil_score": ci.cibil_score,
+            "years_in_business": ci.years_in_business,
+            "promoter_experience_yrs": ci.promoter_experience_yrs,
+            "security_coverage": ci.security_coverage,
+            "gst_compliance_score": 7.0,
+            "gstr_2a_3b_discrepancy_pct": 5,
+            "bank_credit_debit_ratio": 1.05,
+            "emi_bounce_count": 0,
+            "avg_bank_utilisation_pct": 65,
+            "litigation_count": 0,
+            "secondary_research_risk": 0,
+            "sector_outlook_score": 6.0,
+            "macro_risk_score": ci.macro_risk_score,
+            "promoter_contribution_pct": fd.promoter_contribution_pct,
+            "revenue_cr": fd.revenue_cr,
+        }
+
+        ml_decision = decision_engine.decide(features, agent_result)
+        pdf_bytes = cam_generator.generate_pdf(ml_decision, agent_result, ci.model_dump())
+
+        import io
+        return StreamingResponse(
+            io.BytesIO(pdf_bytes),
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f"attachment; filename=CAM_{ci.company_name.replace(' ', '_')}.pdf"
+            },
+        )
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ---------------------------------------------------------------------------
 # Startup
 # ---------------------------------------------------------------------------
 
@@ -455,6 +584,7 @@ def _init_services():
     import time
     global ingestion, orchestrator, decision_engine, cam_generator
     global doc_intelligence, fraud_analyzer, services_ready
+    global doc_classifier, schema_manager, swot_analyzer, genai_narrative
 
     t_total = time.time()
     logger.info("🔄 Initializing services...")
@@ -529,6 +659,39 @@ def _init_services():
         logger.info(f"✅ FraudGraphAnalyzer ready ({time.time()-t:.1f}s)")
     except Exception as e:
         logger.error(f"❌ FraudGraphAnalyzer failed: {e}")
+        traceback.print_exc()
+
+    # New feature services
+    try:
+        from backend.classification.classifier import DocumentClassifier
+        doc_classifier = DocumentClassifier()
+        logger.info("✅ DocumentClassifier ready")
+    except Exception as e:
+        logger.error(f"❌ DocumentClassifier failed: {e}")
+        traceback.print_exc()
+
+    try:
+        from backend.schema.dynamic_schema import DynamicSchemaManager
+        schema_manager = DynamicSchemaManager()
+        logger.info("✅ DynamicSchemaManager ready")
+    except Exception as e:
+        logger.error(f"❌ DynamicSchemaManager failed: {e}")
+        traceback.print_exc()
+
+    try:
+        from backend.analysis.swot_analysis import SWOTAnalyzer
+        swot_analyzer = SWOTAnalyzer()
+        logger.info("✅ SWOTAnalyzer ready")
+    except Exception as e:
+        logger.error(f"❌ SWOTAnalyzer failed: {e}")
+        traceback.print_exc()
+
+    try:
+        from backend.analysis.genai_narrative import GenAINarrativeGenerator
+        genai_narrative = GenAINarrativeGenerator()
+        logger.info("✅ GenAINarrativeGenerator ready")
+    except Exception as e:
+        logger.error(f"❌ GenAINarrativeGenerator failed: {e}")
         traceback.print_exc()
 
     # Check ML models

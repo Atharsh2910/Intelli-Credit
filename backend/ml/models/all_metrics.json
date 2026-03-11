@@ -1,10 +1,10 @@
 {
   "credit_risk": {
-    "auc_roc": 0.7519,
-    "accuracy": 0.83,
+    "auc_roc": 0.6655,
+    "accuracy": 0.741,
     "default_rate_train": 0.2857,
-    "default_rate_test": 0.193,
-    "n_train": 4519,
+    "default_rate_test": 0.276,
+    "n_train": 4053,
     "n_test": 1000,
     "n_features": 25,
     "features_used": [
@@ -36,13 +36,13 @@
     ]
   },
   "loan_limit": {
-    "rmse": 19.8902,
-    "mae": 14.2067,
-    "r2": 0.0067
+    "rmse": 16.4857,
+    "mae": 9.619,
+    "r2": 0.0068
   },
   "interest_rate": {
-    "rmse": 1.6836,
-    "mae": 1.3411,
-    "r2": 0.0726
+    "rmse": 1.5248,
+    "mae": 1.1919,
+    "r2": 0.0609
   }
 }

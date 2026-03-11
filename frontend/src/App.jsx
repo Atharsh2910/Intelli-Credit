@@ -1,11 +1,13 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 
 const API = '/api'
 
 const STEPS = [
   { label: 'Company Profile', section: 'DATA COLLECTION' },
   { label: 'Document Upload', section: 'DATA COLLECTION' },
-  { label: 'GST & Banking', section: 'DATA COLLECTION' },
+  { label: 'Document Review', section: 'CLASSIFICATION' },
+  { label: 'Schema Config', section: 'SCHEMA' },
+  { label: 'GST & Banking', section: 'STRUCTURED DATA' },
   { label: 'Field Insights', section: 'QUALITATIVE' },
   { label: 'Financial Data', section: 'FINANCIAL' },
   { label: 'Run Analysis', section: 'ANALYSIS' },
@@ -21,6 +23,8 @@ const LOADING_PHASES = [
   'Running ML ensemble scoring',
   'Generating SHAP explanations',
   'Convening AI credit committee',
+  'Generating SWOT analysis',
+  'Generating GenAI narrative',
   'Generating Credit Appraisal Memo',
 ]
 
@@ -47,6 +51,18 @@ export default function App() {
   const [error, setError] = useState('')
   const [activeTab, setActiveTab] = useState('summary')
   const [files, setFiles] = useState([])
+
+  // Classification state
+  const [classifications, setClassifications] = useState([])
+  const [docTypes, setDocTypes] = useState([])
+  const [classifying, setClassifying] = useState(false)
+
+  // Schema state
+  const [schemas, setSchemas] = useState({})
+  const [activeSchemaType, setActiveSchemaType] = useState('')
+
+  // PDF download state
+  const [downloading, setDownloading] = useState(false)
 
   const [company, setCompany] = useState({
     company_name: '', industry: '', cin: '', years_in_business: 5,
@@ -89,6 +105,117 @@ export default function App() {
     }
   }
 
+  // Classify uploaded documents
+  const classifyDocuments = async () => {
+    if (files.length === 0) return
+    setClassifying(true)
+    try {
+      const fd = new FormData()
+      files.forEach(f => fd.append('files', f))
+      const res = await fetch(`${API}/classify`, { method: 'POST', body: fd })
+      if (res.ok) {
+        const data = await res.json()
+        setClassifications(data.data.classifications)
+        setDocTypes(data.data.doc_types)
+      }
+    } catch (e) { console.error(e) }
+    finally { setClassifying(false) }
+  }
+
+  const updateClassification = (idx, newType) => {
+    setClassifications(prev => prev.map((c, i) =>
+      i === idx ? { ...c, confirmed_type: newType, confirmed: true } : c
+    ))
+  }
+
+  // Load schemas
+  const loadSchemas = async () => {
+    try {
+      const res = await fetch(`${API}/schema/defaults`)
+      if (res.ok) {
+        const data = await res.json()
+        setSchemas(data.data)
+        const keys = Object.keys(data.data)
+        if (keys.length > 0 && !activeSchemaType) setActiveSchemaType(keys[0])
+      }
+    } catch (e) { console.error(e) }
+  }
+
+  const addSchemaField = (docType) => {
+    setSchemas(prev => ({
+      ...prev,
+      [docType]: {
+        ...prev[docType],
+        fields: [...(prev[docType]?.fields || []), { name: '', label: '', type: 'text', required: false }]
+      }
+    }))
+  }
+
+  const removeSchemaField = (docType, idx) => {
+    setSchemas(prev => ({
+      ...prev,
+      [docType]: {
+        ...prev[docType],
+        fields: prev[docType].fields.filter((_, i) => i !== idx)
+      }
+    }))
+  }
+
+  const updateSchemaField = (docType, idx, key, value) => {
+    setSchemas(prev => ({
+      ...prev,
+      [docType]: {
+        ...prev[docType],
+        fields: prev[docType].fields.map((f, i) =>
+          i === idx ? { ...f, [key]: value } : f
+        )
+      }
+    }))
+  }
+
+  // Trigger classification when entering Document Review step
+  useEffect(() => {
+    if (step === 2 && files.length > 0 && classifications.length === 0) {
+      classifyDocuments()
+    }
+  }, [step])
+
+  // Load schemas when entering Schema Config step
+  useEffect(() => {
+    if (step === 3 && Object.keys(schemas).length === 0) {
+      loadSchemas()
+    }
+  }, [step])
+
+  // Download PDF report
+  const downloadReport = async () => {
+    setDownloading(true)
+    try {
+      const revHistory = financials.revenue_history.split(',').map(Number).filter(n => !isNaN(n))
+      const body = {
+        company_info: { ...company, promoter_names: company.promoter_names ? company.promoter_names.split(',').map(s => s.trim()) : [], years_in_business: Number(company.years_in_business), promoter_experience_yrs: Number(company.promoter_experience_yrs), cibil_score: Number(company.cibil_score), security_coverage: Number(company.security_coverage), macro_risk_score: Number(company.macro_risk_score) },
+        financial_data: { ...Object.fromEntries(Object.entries(financials).filter(([k]) => k !== 'revenue_history').map(([k, v]) => [k, Number(v)])), revenue_history: revHistory },
+      }
+      const res = await fetch(`${API}/report/download`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (res.ok) {
+        const blob = await res.blob()
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `CAM_${company.company_name.replace(/\s+/g, '_')}.pdf`
+        document.body.appendChild(a)
+        a.click()
+        a.remove()
+        window.URL.revokeObjectURL(url)
+      }
+    } catch (e) { console.error(e) }
+    finally { setDownloading(false) }
+  }
+
   const runAnalysis = async () => {
     setLoading(true); setError(''); setLoadingPhase(0)
     const interval = setInterval(() => setLoadingPhase(p => Math.min(p + 1, LOADING_PHASES.length - 1)), 2000)
@@ -106,7 +233,7 @@ export default function App() {
       if (!res.ok) { const err = await res.json(); throw new Error(err.detail || 'Analysis failed') }
       const data = await res.json()
       setResult(data.data)
-      setStep(6)
+      setStep(8)
     } catch (e) { setError(e.message) }
     finally { clearInterval(interval); setLoading(false) }
   }
@@ -166,6 +293,152 @@ export default function App() {
                 <button className="file-remove" onClick={() => removeFile(i)}>×</button>
               </div>
             ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+
+  // ─── NEW: Document Classification & HITL Review ───
+  const renderDocReview = () => (
+    <div className="animate-in">
+      <div className="page-header">
+        <div className="page-title">Document Review & Classification</div>
+        <div className="page-subtitle">AI has auto-classified your documents. Review, approve, or override each classification below.</div>
+      </div>
+      {files.length === 0 ? (
+        <div className="card">
+          <div style={{ padding: '24px', textAlign: 'center', color: '#a0aec0' }}>
+            <div style={{ fontSize: '1.2rem', marginBottom: 6 }}>No documents uploaded</div>
+            <div style={{ fontSize: '0.82rem' }}>Go back to the Document Upload step to add files.</div>
+          </div>
+        </div>
+      ) : classifying ? (
+        <div className="card">
+          <div className="loading-overlay" style={{ padding: '32px' }}>
+            <div className="spinner" />
+            <div className="loading-text">Classifying documents with AI...</div>
+          </div>
+        </div>
+      ) : (
+        <div className="card">
+          <div className="card-header">
+            <div className="card-title">Classification Results</div>
+            <div className="card-badge" style={{ background: '#ebf8ff', color: '#2b6cb0' }}>Human-in-the-Loop</div>
+          </div>
+          <div className="classification-list">
+            {classifications.map((c, i) => {
+              const confPct = Math.round((c.confidence || 0) * 100)
+              const confColor = confPct >= 70 ? '#38a169' : confPct >= 40 ? '#d69e2e' : '#e53e3e'
+              return (
+                <div className="classification-item" key={i}>
+                  <div className="classification-file">
+                    <span className="classification-file-icon">📄</span>
+                    <span>{c.filename}</span>
+                  </div>
+                  <div className="classification-details">
+                    <div className="classification-row">
+                      <span className="classification-label">AI Suggestion:</span>
+                      <span className="classification-badge" style={{ background: confColor + '18', color: confColor, borderColor: confColor }}>
+                        {c.suggested_label} ({confPct}%)
+                      </span>
+                    </div>
+                    <div className="classification-row">
+                      <span className="classification-label">Confirmed Type:</span>
+                      <select
+                        className="classification-select"
+                        value={c.confirmed_type || c.suggested_type}
+                        onChange={e => updateClassification(i, e.target.value)}
+                      >
+                        {(docTypes.length > 0 ? docTypes : [{ value: c.suggested_type, label: c.suggested_label }]).map(dt => (
+                          <option key={dt.value} value={dt.value}>{dt.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="classification-status">
+                    {c.confirmed ? (
+                      <span style={{ color: '#38a169', fontWeight: 600, fontSize: '0.78rem' }}>✓ Confirmed</span>
+                    ) : (
+                      <span style={{ color: '#d69e2e', fontSize: '0.78rem' }}>Pending review</span>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+          {classifications.length > 0 && (
+            <div className="btn-group" style={{ marginTop: 16 }}>
+              <button className="btn btn-primary btn-sm" onClick={() => {
+                setClassifications(prev => prev.map(c => ({ ...c, confirmed: true, confirmed_type: c.confirmed_type || c.suggested_type })))
+              }}>
+                Approve All Classifications
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+
+  // ─── NEW: Dynamic Schema Configuration ───
+  const renderSchemaConfig = () => (
+    <div className="animate-in">
+      <div className="page-header">
+        <div className="page-title">Schema Configuration</div>
+        <div className="page-subtitle">Define the data fields to extract from each document type. Add, remove, or rename fields as needed.</div>
+      </div>
+      <div className="card">
+        <div className="card-header">
+          <div className="card-title">Extraction Schemas</div>
+          <div className="card-badge" style={{ background: '#f0fff4', color: '#38a169' }}>Dynamic Schema</div>
+        </div>
+        <div className="schema-tabs">
+          {Object.entries(schemas).map(([key, schema]) => (
+            <button
+              key={key}
+              className={`schema-tab ${activeSchemaType === key ? 'active' : ''}`}
+              onClick={() => setActiveSchemaType(key)}
+            >
+              {schema.label || key}
+            </button>
+          ))}
+        </div>
+        {activeSchemaType && schemas[activeSchemaType] && (
+          <div className="schema-editor">
+            <div className="schema-fields">
+              {(schemas[activeSchemaType]?.fields || []).map((f, i) => (
+                <div className="schema-field-row" key={i}>
+                  <input
+                    className="schema-input"
+                    value={f.label}
+                    onChange={e => updateSchemaField(activeSchemaType, i, 'label', e.target.value)}
+                    placeholder="Field Label"
+                  />
+                  <select
+                    className="schema-input schema-type-select"
+                    value={f.type}
+                    onChange={e => updateSchemaField(activeSchemaType, i, 'type', e.target.value)}
+                  >
+                    <option value="text">Text</option>
+                    <option value="number">Number</option>
+                    <option value="date">Date</option>
+                  </select>
+                  <label className="schema-required">
+                    <input
+                      type="checkbox"
+                      checked={f.required}
+                      onChange={e => updateSchemaField(activeSchemaType, i, 'required', e.target.checked)}
+                    />
+                    Required
+                  </label>
+                  <button className="schema-remove-btn" onClick={() => removeSchemaField(activeSchemaType, i)}>×</button>
+                </div>
+              ))}
+            </div>
+            <button className="btn btn-secondary btn-sm" style={{ marginTop: 12 }} onClick={() => addSchemaField(activeSchemaType)}>
+              + Add Field
+            </button>
           </div>
         )}
       </div>
@@ -287,7 +560,7 @@ export default function App() {
             {error && <div style={{ color: '#e53e3e', padding: '10px 14px', background: '#fff5f5', border: '1px solid #fed7d7', borderRadius: '4px', marginBottom: '14px', fontSize: '0.82rem' }}>Error: {error}</div>}
             <div className="pipeline-info">
               <div style={{ fontSize: '0.78rem', fontWeight: 600, color: '#2d3748', marginBottom: '8px' }}>Pipeline Stages</div>
-              {['Financial ratio computation (DSCR, D/E, ICR, CR)', 'Secondary research — news, MCA, litigation (Tavily)', 'Fraud graph construction & network analysis (NetworkX)', 'Cashflow forecasting (Prophet time-series)', 'Risk signal aggregation across all data sources', 'ML ensemble scoring — XGBoost + LightGBM + RF', 'SHAP feature attribution & explainability', 'AI credit committee synthesis (GPT-4o)', 'Credit Appraisal Memo generation'].map((s, i) => (
+              {['Financial ratio computation (DSCR, D/E, ICR, CR)', 'Secondary research — news, MCA, litigation (Tavily)', 'Fraud graph construction & network analysis (NetworkX)', 'Cashflow forecasting (Prophet time-series)', 'Risk signal aggregation across all data sources', 'ML ensemble scoring — XGBoost + LightGBM + RF', 'SHAP feature attribution & explainability', 'AI credit committee synthesis (GPT-4o)', 'SWOT analysis generation', 'GenAI executive narrative', 'Credit Appraisal Memo generation'].map((s, i) => (
                 <div key={i} className="pipeline-item">{s}</div>
               ))}
             </div>
@@ -304,7 +577,7 @@ export default function App() {
 
   const renderDecision = () => {
     if (!result) return null
-    const { decision: d, agent_analysis: aa, cam } = result
+    const { decision: d, agent_analysis: aa, cam, swot_analysis: swot, genai_narrative: genaiNarr } = result
     const fiveCs = aa?.committee_synthesis?.five_cs || {}
     const decisionClass = d?.decision?.includes('APPROVE') && !d?.decision?.includes('CONDITIONS') ? 'approve' : d?.decision?.includes('CONDITIONS') ? 'conditions' : 'decline'
 
@@ -344,7 +617,7 @@ export default function App() {
         </div>
 
         <div className="tab-group">
-          {[['summary', 'Summary'], ['shap', 'Model Explanation'], ['fivecs', 'Five Cs Scorecard'], ['risks', 'Risk Assessment'], ['fraud', 'Fraud Analysis'], ['memo', 'Credit Memo']].map(([key, label]) => (
+          {[['summary', 'Summary'], ['shap', 'Model Explanation'], ['fivecs', 'Five Cs Scorecard'], ['risks', 'Risk Assessment'], ['fraud', 'Fraud Analysis'], ['swot', 'SWOT Analysis'], ['genai', 'GenAI Insights'], ['memo', 'Credit Memo']].map(([key, label]) => (
             <button key={key} className={`tab-btn ${activeTab === key ? 'active' : ''}`} onClick={() => setActiveTab(key)}>{label}</button>
           ))}
         </div>
@@ -457,9 +730,102 @@ export default function App() {
           </div>
         )}
 
+        {/* ─── NEW: SWOT Analysis Tab ─── */}
+        {activeTab === 'swot' && (
+          <div className="card">
+            <div className="card-header">
+              <div className="card-title">SWOT Analysis</div>
+              <div className="card-badge" style={{ background: '#f0fff4', color: '#38a169' }}>Strategic Assessment</div>
+            </div>
+            {swot ? (
+              <>
+                <div className="swot-grid">
+                  <div className="swot-quadrant swot-strengths">
+                    <div className="swot-quadrant-title">💪 Strengths</div>
+                    {(swot.strengths || []).map((s, i) => (
+                      <div className="swot-item" key={i}>
+                        <div className="swot-item-title">{s.title}</div>
+                        <div className="swot-item-detail">{s.detail}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="swot-quadrant swot-weaknesses">
+                    <div className="swot-quadrant-title">⚠️ Weaknesses</div>
+                    {(swot.weaknesses || []).map((s, i) => (
+                      <div className="swot-item" key={i}>
+                        <div className="swot-item-title">{s.title}</div>
+                        <div className="swot-item-detail">{s.detail}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="swot-quadrant swot-opportunities">
+                    <div className="swot-quadrant-title">🚀 Opportunities</div>
+                    {(swot.opportunities || []).map((s, i) => (
+                      <div className="swot-item" key={i}>
+                        <div className="swot-item-title">{s.title}</div>
+                        <div className="swot-item-detail">{s.detail}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="swot-quadrant swot-threats">
+                    <div className="swot-quadrant-title">🔴 Threats</div>
+                    {(swot.threats || []).map((s, i) => (
+                      <div className="swot-item" key={i}>
+                        <div className="swot-item-title">{s.title}</div>
+                        <div className="swot-item-detail">{s.detail}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                {swot.summary && (
+                  <div style={{ marginTop: 16, padding: '12px 16px', background: '#f7f8fa', borderRadius: '6px', fontSize: '0.82rem', color: '#4a5568', lineHeight: 1.6 }}>
+                    <strong>Summary: </strong>{swot.summary}
+                  </div>
+                )}
+              </>
+            ) : (
+              <div style={{ color: '#a0aec0', fontSize: '0.82rem', padding: 8 }}>SWOT analysis not available.</div>
+            )}
+          </div>
+        )}
+
+        {/* ─── NEW: GenAI Insights Tab ─── */}
+        {activeTab === 'genai' && (
+          <div className="card">
+            <div className="card-header">
+              <div className="card-title">GenAI Executive Summary</div>
+              <div className="card-badge" style={{ background: '#f0e6ff', color: '#6b46c1' }}>
+                {genaiNarr?.generated_by || 'AI Generated'}
+              </div>
+            </div>
+            {genaiNarr?.narrative ? (
+              <div className="genai-narrative">
+                {genaiNarr.narrative}
+              </div>
+            ) : (
+              <div style={{ color: '#a0aec0', fontSize: '0.82rem', padding: 8 }}>GenAI narrative not available.</div>
+            )}
+            {genaiNarr?.generated_at && (
+              <div style={{ marginTop: 12, fontSize: '0.72rem', color: '#a0aec0' }}>
+                Generated: {new Date(genaiNarr.generated_at).toLocaleString()}
+              </div>
+            )}
+          </div>
+        )}
+
         {activeTab === 'memo' && (
           <div className="card">
-            <div className="card-header"><div className="card-title">Credit Appraisal Memo (CAM)</div></div>
+            <div className="card-header">
+              <div className="card-title">Credit Appraisal Memo (CAM)</div>
+              <button
+                className="btn btn-primary btn-sm"
+                onClick={downloadReport}
+                disabled={downloading}
+                style={{ marginLeft: 'auto' }}
+              >
+                {downloading ? 'Generating PDF...' : '⬇ Download PDF Report'}
+              </button>
+            </div>
             <div className="cam-memo">{cam?.memo_text || 'No memo generated.'}</div>
           </div>
         )}
@@ -467,7 +833,7 @@ export default function App() {
     )
   }
 
-  const stepRenderers = [renderCompany, renderDocuments, renderGstBank, renderFieldInsights, renderFinancials, renderAnalyze, renderDecision]
+  const stepRenderers = [renderCompany, renderDocuments, renderDocReview, renderSchemaConfig, renderGstBank, renderFieldInsights, renderFinancials, renderAnalyze, renderDecision]
 
   // Derive sidebar sections
   let lastSection = ''
@@ -516,8 +882,8 @@ export default function App() {
             <div className="top-bar-breadcrumb">Credit Analysis / {STEPS[step].section} / {STEPS[step].label}</div>
           </div>
           <div className="top-bar-actions">
-            {step < 5 && step > 0 && <button className="btn btn-secondary btn-sm" onClick={() => setStep(s => s - 1)}>← Previous</button>}
-            {step < 5 && <button className="btn btn-primary btn-sm" onClick={() => setStep(s => s + 1)} disabled={!canProceed}>Next Step →</button>}
+            {step < 7 && step > 0 && <button className="btn btn-secondary btn-sm" onClick={() => setStep(s => s - 1)}>← Previous</button>}
+            {step < 7 && <button className="btn btn-primary btn-sm" onClick={() => setStep(s => s + 1)} disabled={!canProceed}>Next Step →</button>}
           </div>
         </div>
 

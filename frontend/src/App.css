@@ -811,3 +811,307 @@ body {
 }
 
 .animate-in { animation: fadeIn 0.3s ease forwards; }
+
+
+/* ═══════════════════════════════════════════════
+   NEW FEATURES
+   ═══════════════════════════════════════════════ */
+
+/* ── Document Classification HITL ── */
+.classification-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.classification-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 16px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  transition: border-color 0.2s;
+}
+
+.classification-item:hover {
+  border-color: var(--border-dark);
+}
+
+.classification-file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 200px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.classification-file-icon {
+  font-size: 1.2rem;
+}
+
+.classification-details {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.classification-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.78rem;
+}
+
+.classification-label {
+  color: var(--text-muted);
+  min-width: 100px;
+}
+
+.classification-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 20px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  border: 1px solid;
+}
+
+.classification-select {
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 0.78rem;
+  background: var(--bg-white);
+  color: var(--text-primary);
+  cursor: pointer;
+  min-width: 180px;
+}
+
+.classification-select:focus {
+  outline: none;
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 2px rgba(49, 130, 206, 0.15);
+}
+
+.classification-status {
+  min-width: 90px;
+  text-align: right;
+}
+
+/* ── Dynamic Schema Editor ── */
+.schema-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 16px;
+}
+
+.schema-tab {
+  padding: 5px 14px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-white);
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.schema-tab:hover {
+  background: var(--bg-input);
+  border-color: var(--border-dark);
+}
+
+.schema-tab.active {
+  background: var(--navy);
+  color: var(--text-white);
+  border-color: var(--navy);
+}
+
+.schema-editor {
+  padding: 8px 0;
+}
+
+.schema-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.schema-field-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+}
+
+.schema-input {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 0.78rem;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  flex: 1;
+}
+
+.schema-input:focus {
+  outline: none;
+  border-color: var(--border-focus);
+  background: var(--bg-white);
+}
+
+.schema-type-select {
+  flex: 0 0 100px;
+}
+
+.schema-required {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.schema-required input[type="checkbox"] {
+  accent-color: var(--navy);
+}
+
+.schema-remove-btn {
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-white);
+  color: var(--danger);
+  font-size: 1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+
+.schema-remove-btn:hover {
+  background: #fff5f5;
+  border-color: #e53e3e;
+  color: #e53e3e;
+}
+
+/* ── SWOT Grid ── */
+.swot-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.swot-quadrant {
+  border-radius: 8px;
+  padding: 16px;
+  border: 1px solid var(--border);
+}
+
+.swot-strengths {
+  background: linear-gradient(135deg, #f0fff4 0%, #c6f6d5 100%);
+  border-color: #9ae6b4;
+}
+
+.swot-weaknesses {
+  background: linear-gradient(135deg, #fffff0 0%, #fefcbf 100%);
+  border-color: #f6e05e;
+}
+
+.swot-opportunities {
+  background: linear-gradient(135deg, #ebf8ff 0%, #bee3f8 100%);
+  border-color: #90cdf4;
+}
+
+.swot-threats {
+  background: linear-gradient(135deg, #fff5f5 0%, #fed7d7 100%);
+  border-color: #feb2b2;
+}
+
+.swot-quadrant-title {
+  font-size: 0.88rem;
+  font-weight: 700;
+  margin-bottom: 12px;
+  color: var(--text-primary);
+}
+
+.swot-item {
+  margin-bottom: 10px;
+}
+
+.swot-item:last-child {
+  margin-bottom: 0;
+}
+
+.swot-item-title {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+
+.swot-item-detail {
+  font-size: 0.74rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+/* ── GenAI Narrative ── */
+.genai-narrative {
+  font-size: 0.86rem;
+  line-height: 1.85;
+  color: var(--text-primary);
+  white-space: pre-line;
+  padding: 20px 24px;
+  background: linear-gradient(145deg, #fafbfc 0%, #f7f8fa 100%);
+  border-radius: 8px;
+  border-left: 4px solid var(--navy-medium);
+  font-family: 'Georgia', 'Times New Roman', serif;
+}
+
+/* ── Button group & Download ── */
+.btn-group {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.card-header .btn {
+  flex-shrink: 0;
+}
+
+/* ── Responsive SWOT for smaller screens ── */
+@media (max-width: 768px) {
+  .swot-grid {
+    grid-template-columns: 1fr;
+  }
+  .classification-item {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .classification-file {
+    min-width: auto;
+  }
+  .classification-status {
+    text-align: left;
+  }
+  .schema-field-row {
+    flex-wrap: wrap;
+  }
+}
+
