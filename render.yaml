@@ -4,7 +4,7 @@ services:
     env: python
     plan: free
 
-    buildCommand: pip install uv && uv pip install -r requirements.txt --system
+    buildCommand: pip install uv && uv pip install -r requirements.txt
     startCommand: python -m uvicorn backend.api.main:app --host 0.0.0.0 --port $PORT
 
     envVars:
