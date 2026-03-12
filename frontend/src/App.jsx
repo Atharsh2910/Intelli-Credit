@@ -259,7 +259,7 @@ export default function App() {
           <div className="hero-stat-divider" />
           <div className="hero-stat"><div className="hero-stat-value">SHAP</div><div className="hero-stat-label">Full Explainability</div></div>
           <div className="hero-stat-divider" />
-          <div className="hero-stat"><div className="hero-stat-value">CAM</div><div className="hero-stat-label">25+ Financial Parameters</div></div>
+          <div className="hero-stat"><div className="hero-stat-value">Credit Metrics</div><div className="hero-stat-label">25+ Financial Parameters</div></div>
           <div className="hero-stat-divider" />
           <div className="hero-stat"><div className="hero-stat-value">CAM</div><div className="hero-stat-label">Auto-Generated</div></div>
         </div>
