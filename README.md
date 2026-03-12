@@ -5,7 +5,7 @@
 ---
 
 ## Project Solution Overview
-**Intelli-Credit** is a cutting-edge AI platform designed to replace fragmented, manual, and subjective credit appraisal processes with an autonomous, high-precision decisioning engine. It acts as a **virtual credit committee**, simulating human expert reasoning to provide structured, explainable, and institution-grade credit recommendations for SME and corporate borrowers.
+**Intelli-Credit** is an AI powered platform designed to replace fragmented, manual, and subjective credit appraisal processes with an autonomous, high-precision decisioning engine. It acts as a **virtual credit committee**, simulating human expert reasoning to provide structured, explainable, and institution-grade credit recommendations for SME and corporate borrowers.
 
 By integrating multi-agent orchestration with advanced machine learning, the solution eliminates data silos, reduces appraisal turnaround time from weeks to minutes, and provides a "Source of Truth" for credit decisions.
 
