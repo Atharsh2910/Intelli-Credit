@@ -182,5 +182,6 @@ YouTube Link: [Intelli-Credit](https://youtu.be/maHg_Yy0GCQ)
 ```
 Deployed URL: [Intelli-Credit-AI Powered Multi-Agent Credit Decision Engine](https://intelli-credit-ai-enterprise-credit.vercel.app/)
 ```
+```
 ---
 *Note: This is a private project and not open-source. Unauthorized distribution is prohibited.*
