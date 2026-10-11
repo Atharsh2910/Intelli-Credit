@@ -599,7 +599,7 @@ export default function App() {
             {error && <div style={{ color: 'var(--danger)', padding: '12px 16px', background: 'var(--danger-bg)', border: '1px solid var(--danger-border)', borderRadius: '8px', marginBottom: '16px', fontSize: '0.82rem' }}>Error: {error}</div>}
             <div className="pipeline-info">
               <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '1.2px' }}>Pipeline Stages</div>
-              {['Financial ratio computation (DSCR, D/E, ICR, CR)', 'Secondary research — news, MCA, litigation (Tavily)', 'Fraud graph construction & network analysis (NetworkX)', 'Cashflow forecasting (Prophet time-series)', 'Risk signal aggregation across all data sources', 'ML ensemble scoring — XGBoost + LightGBM + RF', 'SHAP feature attribution & explainability', 'AI credit committee synthesis (GPT-4o)', 'SWOT analysis generation', 'GenAI executive narrative', 'Credit Appraisal Memo generation'].map((s, i) => (
+              {['Financial ratio computation (DSCR, D/E, ICR, CR)', 'Secondary research — news, MCA, litigation (SerpAPI)', 'Fraud graph construction & network analysis (NetworkX)', 'Cashflow forecasting (Prophet time-series)', 'Risk signal aggregation across all data sources', 'ML ensemble scoring — XGBoost + LightGBM + RF', 'SHAP feature attribution & explainability', 'AI credit committee synthesis (Groq / LLM)', 'SWOT analysis generation', 'GenAI executive narrative', 'Credit Appraisal Memo generation'].map((s, i) => (
                 <div key={i} className="pipeline-item">{s}</div>
               ))}
             </div>

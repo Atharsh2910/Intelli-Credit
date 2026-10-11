@@ -13,14 +13,24 @@ from dotenv import load_dotenv
 load_dotenv()
 
 try:
+    from langchain_groq import ChatGroq
+    HAS_LANGCHAIN_GROQ = True
+except ImportError:
+    HAS_LANGCHAIN_GROQ = False
+
+try:
     from langchain_openai import ChatOpenAI
+    HAS_LANGCHAIN_OPENAI = True
+except ImportError:
+    HAS_LANGCHAIN_OPENAI = False
+
+try:
     from langchain_classic.agents import AgentExecutor, create_openai_tools_agent
     from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
     HAS_LANGCHAIN = True
 except ImportError:
     try:
         # Fallback for older langchain versions
-        from langchain_openai import ChatOpenAI
         from langchain.agents import AgentExecutor, create_openai_tools_agent
         from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
         HAS_LANGCHAIN = True
@@ -124,7 +134,7 @@ RISK_AGENT_PROMPT = """You are a senior risk officer at an Indian bank. Your rol
 You MUST use the risk_assessment tool with data from all previous analyses.
 
 After assessment, provide a JSON response with:
-- risk_factors: list of {category, factor, severity, detail}
+- risk_factors: list of {{category, factor, severity, detail}}
 - risk_score: int 0-100
 - risk_level: "LOW", "MEDIUM", "HIGH", or "CRITICAL"
 - risk_summary: summary of findings
@@ -161,17 +171,31 @@ Return ONLY valid JSON."""
 # ---------------------------------------------------------------------------
 
 def _create_llm(temperature: float = 0.1):
-    """Create the ChatOpenAI LLM instance."""
+    """Create the LLM instance, prioritizing Groq, with fallback to OpenAI."""
     if not HAS_LANGCHAIN:
         return None
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        return None
-    return ChatOpenAI(
-        model=os.getenv("OPENAI_MODEL", "gpt-4o"),
-        temperature=temperature,
-        api_key=api_key,
-    )
+
+    groq_api_key = os.getenv("GROQ_API_KEY")
+    if HAS_LANGCHAIN_GROQ and groq_api_key:
+        model = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b")
+        max_tokens = int(os.getenv("GROQ_MAX_TOKENS", "600"))
+        return ChatGroq(
+            model=model,
+            groq_api_key=groq_api_key,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+
+    openai_api_key = os.getenv("OPENAI_API_KEY")
+    if HAS_LANGCHAIN_OPENAI and openai_api_key:
+        model = os.getenv("OPENAI_MODEL", "gpt-4o")
+        return ChatOpenAI(
+            model=model,
+            temperature=temperature,
+            api_key=openai_api_key,
+        )
+
+    return None
 
 
 def _create_agent_executor(

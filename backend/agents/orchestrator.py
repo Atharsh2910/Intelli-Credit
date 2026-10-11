@@ -30,7 +30,7 @@ class LangChainCreditOrchestrator:
     """
     Multi-agent orchestrator for end-to-end credit analysis.
 
-    When LangChain + OpenAI API key are available:
+    When LangChain + Groq/OpenAI API key are available:
         Uses LangChain AgentExecutors with specialized prompts and tools.
         Each agent reasons about its domain and calls tools autonomously.
 
@@ -54,12 +54,12 @@ class LangChainCreditOrchestrator:
             try:
                 self.agent_factory = LangChainAgentFactory()
                 if self.agent_factory.is_available:
-                    print("🤖 LangChain agents initialized — using LLM-powered orchestration")
+                    print("[INFO] LangChain agents initialized - using LLM-powered orchestration")
                 else:
-                    print("⚠️  LangChain available but no API key — using rule-based fallback")
+                    print("[WARN] LangChain available but no API key - using rule-based fallback")
                     self.agent_factory = None
             except Exception as e:
-                print(f"⚠️  LangChain agent init failed: {e} — using rule-based fallback")
+                print(f"[WARN] LangChain agent init failed: {e} - using rule-based fallback")
                 self.agent_factory = None
 
     @property
@@ -132,7 +132,11 @@ class LangChainCreditOrchestrator:
             )
 
         print(f"  📊 Phase 1: Financial Agent analyzing {company_name}...")
-        financial_result = self.agent_factory.run_agent("financial", financial_prompt)
+        try:
+            financial_result = self.agent_factory.run_agent("financial", financial_prompt)
+        except Exception as e:
+            print(f"  ⚠️ Financial Agent fallback: {e}")
+            financial_result = {}
 
         # Ensure we have core ratios (merge tool output with agent synthesis)
         core_financial = self.financial_agent.analyze(financial_data)
@@ -146,7 +150,11 @@ class LangChainCreditOrchestrator:
         )
 
         print(f"  🔍 Phase 2: Research Agent investigating {company_name}...")
-        research_result = self.agent_factory.run_agent("research", research_prompt)
+        try:
+            research_result = self.agent_factory.run_agent("research", research_prompt)
+        except Exception as e:
+            print(f"  ⚠️ Research Agent fallback: {e}")
+            research_result = {}
 
         # Ensure we have core research data
         core_research = self.research_agent.research(
@@ -164,7 +172,11 @@ class LangChainCreditOrchestrator:
         )
 
         print(f"  🕵️ Phase 3: Fraud Agent analyzing {company_name} network...")
-        fraud_result = self.agent_factory.run_agent("fraud", fraud_prompt)
+        try:
+            fraud_result = self.agent_factory.run_agent("fraud", fraud_prompt)
+        except Exception as e:
+            print(f"  ⚠️ Fraud Agent fallback: {e}")
+            fraud_result = {}
 
         # Ensure core fraud data
         core_fraud = self.fraud_agent.analyze(fraud_data)
@@ -181,7 +193,11 @@ class LangChainCreditOrchestrator:
         )
 
         print(f"  💧 Phase 4: Liquidity Agent analyzing {company_name}...")
-        liquidity_result = self.agent_factory.run_agent("liquidity", liquidity_prompt)
+        try:
+            liquidity_result = self.agent_factory.run_agent("liquidity", liquidity_prompt)
+        except Exception as e:
+            print(f"  ⚠️ Liquidity Agent fallback: {e}")
+            liquidity_result = {}
 
         # Ensure core liquidity data
         core_liquidity = self.liquidity_agent.analyze(cashflow_data, core_financial)
@@ -201,7 +217,11 @@ class LangChainCreditOrchestrator:
         )
 
         print(f"  ⚠️ Phase 5: Risk Agent assessing {company_name}...")
-        risk_result = self.agent_factory.run_agent("risk", risk_prompt)
+        try:
+            risk_result = self.agent_factory.run_agent("risk", risk_prompt)
+        except Exception as e:
+            print(f"  ⚠️ Risk Agent fallback: {e}")
+            risk_result = {}
 
         # Ensure core risk data
         core_risk = self.risk_agent.assess(

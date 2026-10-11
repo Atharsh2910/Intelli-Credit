@@ -7,6 +7,7 @@ import os
 import sys
 import json
 import logging
+import threading
 import traceback
 from typing import Dict, List, Optional, Any
 from datetime import datetime
@@ -62,6 +63,8 @@ schema_manager = None
 swot_analyzer = None
 genai_narrative = None
 services_ready = False
+_init_lock = threading.Lock()
+_initializing = False
 model_dir = os.path.join(project_root, "backend", "ml", "models")
 
 
@@ -287,7 +290,7 @@ async def analyse_primary(company_name: str = Form(...)):
 
 @app.post("/api/analyse/secondary")
 async def analyse_secondary(company_name: str = Form(...), promoter_names: str = Form(""), industry: str = Form("")):
-    """Web research using Tavily."""
+    """Web research using SerpAPI."""
     try:
         promoters = [n.strip() for n in promoter_names.split(",") if n.strip()]
         research = orchestrator.research_agent.research(company_name, promoters, industry)
@@ -585,6 +588,13 @@ def _init_services():
     global ingestion, orchestrator, decision_engine, cam_generator
     global doc_intelligence, fraud_analyzer, services_ready
     global doc_classifier, schema_manager, swot_analyzer, genai_narrative
+    global _initializing
+
+    if services_ready:
+        return
+    if not _init_lock.acquire(blocking=False):
+        return
+    _initializing = True
 
     t_total = time.time()
     logger.info("🔄 Initializing services...")
@@ -625,7 +635,7 @@ def _init_services():
         logger.error(f"❌ DecisionEngine failed: {e}")
         traceback.print_exc()
 
-    # -- 4. CAMGenerator (lightweight, just creates OpenAI client) --
+    # -- 4. CAMGenerator (lightweight, creates Groq/OpenAI client) --
     try:
         t = time.time()
         from backend.cam_generator.memo_generator import CAMGenerator
@@ -701,6 +711,11 @@ def _init_services():
         logger.warning("⚠️  ML models not found. Run 'python scripts/train_model.py' to train.")
 
     services_ready = True
+    _initializing = False
+    try:
+        _init_lock.release()
+    except RuntimeError:
+        pass
     logger.info(f"🚀 Intelli-Credit API is ready. Total init: {time.time()-t_total:.1f}s")
 
 

@@ -12,6 +12,12 @@ from dotenv import load_dotenv
 load_dotenv()
 
 try:
+    from groq import Groq
+    HAS_GROQ = True
+except ImportError:
+    HAS_GROQ = False
+
+try:
     from openai import OpenAI
     HAS_OPENAI = True
 except ImportError:
@@ -23,8 +29,20 @@ class SWOTAnalyzer:
 
     def __init__(self):
         self.client = None
-        if HAS_OPENAI and os.getenv("OPENAI_API_KEY"):
-            self.client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        self.provider = None
+        self.model = None
+
+        groq_api_key = os.getenv("GROQ_API_KEY")
+        openai_api_key = os.getenv("OPENAI_API_KEY")
+
+        if HAS_GROQ and groq_api_key:
+            self.client = Groq(api_key=groq_api_key)
+            self.provider = "groq"
+            self.model = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b")
+        elif HAS_OPENAI and openai_api_key:
+            self.client = OpenAI(api_key=openai_api_key)
+            self.provider = "openai"
+            self.model = os.getenv("OPENAI_MODEL", "gpt-4o")
 
     def generate(self, agent_analysis: Dict, decision: Dict = None,
                  company_info: Dict = None) -> Dict[str, Any]:
@@ -77,16 +95,26 @@ Provide 3-5 items per quadrant. Be specific using data from the analysis.
 Focus on credit-relevant factors for an Indian corporate borrower."""
 
         response = self.client.chat.completions.create(
-            model=os.getenv("OPENAI_MODEL", "gpt-4o"),
+            model=self.model,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.2,
             max_tokens=1500,
         )
-        content = response.choices[0].message.content.strip()
-        if content.startswith("```"):
-            content = content.split("```")[1]
-            if content.startswith("json"):
-                content = content[4:]
+        msg = response.choices[0].message
+        content = (msg.content or "").strip()
+        if not content and hasattr(msg, "reasoning"):
+            content = (getattr(msg, "reasoning") or "").strip()
+
+        if "```" in content:
+            import re
+            m = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", content)
+            if m:
+                content = m.group(1).strip()
+        start = content.find("{")
+        end = content.rfind("}")
+        if start != -1 and end != -1:
+            content = content[start : end + 1]
+
         return json.loads(content)
 
     def _rule_generate(self, analysis: Dict, decision: Dict = None,

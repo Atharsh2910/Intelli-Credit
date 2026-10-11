@@ -14,6 +14,12 @@ from dotenv import load_dotenv
 load_dotenv()
 
 try:
+    from groq import Groq
+    HAS_GROQ = True
+except ImportError:
+    HAS_GROQ = False
+
+try:
     from openai import OpenAI
     HAS_OPENAI = True
 except ImportError:
@@ -25,8 +31,20 @@ class CAMGenerator:
 
     def __init__(self):
         self.client = None
-        if HAS_OPENAI and os.getenv("OPENAI_API_KEY"):
-            self.client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        self.provider = None
+        self.model = None
+
+        groq_api_key = os.getenv("GROQ_API_KEY")
+        openai_api_key = os.getenv("OPENAI_API_KEY")
+
+        if HAS_GROQ and groq_api_key:
+            self.client = Groq(api_key=groq_api_key)
+            self.provider = "groq"
+            self.model = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b")
+        elif HAS_OPENAI and openai_api_key:
+            self.client = OpenAI(api_key=openai_api_key)
+            self.provider = "openai"
+            self.model = os.getenv("OPENAI_MODEL", "gpt-4o")
 
     def generate(self, decision: Dict, agent_analysis: Dict, company_info: Dict = None) -> Dict[str, Any]:
         """Generate a complete CAM."""
@@ -80,14 +98,19 @@ Make it professional, detailed (500+ words), and suitable for a credit committee
 Use ₹ for currency. Include specific numbers from the analysis."""
 
         try:
+            max_tokens = min(int(os.getenv("GROQ_MAX_TOKENS", "750")), 800)
             response = self.client.chat.completions.create(
-                model=os.getenv("OPENAI_MODEL", "gpt-4o"),
+                model=self.model,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.2,
-                max_tokens=2000,
+                max_tokens=max_tokens,
             )
-            return response.choices[0].message.content
-        except Exception as e:
+            msg = response.choices[0].message
+            content = (msg.content or "").strip()
+            if not content and hasattr(msg, "reasoning"):
+                content = (getattr(msg, "reasoning") or "").strip()
+            return content if content else self._template_generate(decision, analysis, info)
+        except Exception:
             return self._template_generate(decision, analysis, info)
 
     def _template_generate(self, decision, analysis, info) -> str:
@@ -101,10 +124,14 @@ Use ₹ for currency. Include specific numbers from the analysis."""
         fraud = analysis.get("fraud_analysis", {})
 
         shap = decision.get("shap_explanation", [])
-        shap_text = "\n".join([
-            f"  • {s['feature']}: {'+' if s['impact']>0 else ''}{s['impact']:.3f} ({s['direction']})"
-            for s in shap[:5]
-        ]) if shap else "  • Model explanation not available"
+        shap_lines = []
+        for s in (shap[:5] if isinstance(shap, list) else []):
+            imp = s.get("impact", s.get("importance", 0.0))
+            direction = s.get("direction", "")
+            feat = s.get("feature", "N/A")
+            sign = "+" if imp > 0 else ""
+            shap_lines.append(f"  • {feat}: {sign}{imp:.3f} ({direction})")
+        shap_text = "\n".join(shap_lines) if shap_lines else "  • Model explanation not available"
 
         covenants = decision.get("covenants", [])
         cov_text = "\n".join([f"  {i+1}. {c}" for i, c in enumerate(covenants)]) if covenants else "  Standard monitoring"

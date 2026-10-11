@@ -15,8 +15,17 @@ from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
 
-import fitz  # PyMuPDF
-import pdfplumber
+try:
+    import fitz  # PyMuPDF
+    HAS_FITZ = True
+except ImportError:
+    HAS_FITZ = False
+
+try:
+    import pdfplumber
+    HAS_PDFPLUMBER = True
+except ImportError:
+    HAS_PDFPLUMBER = False
 import pandas as pd
 import numpy as np
 from dotenv import load_dotenv
@@ -87,11 +96,16 @@ class PDFParser:
         doc_id = hashlib.md5(f"{file_path}{datetime.now().isoformat()}".encode()).hexdigest()[:16]
         filename = os.path.basename(file_path)
 
-        # Try PyMuPDF first (faster)
-        text, pages, tables = self._parse_pymupdf(file_path)
+        # Try PyMuPDF first (faster) if available
+        if HAS_FITZ:
+            text, pages, tables = self._parse_pymupdf(file_path)
+        elif HAS_PDFPLUMBER:
+            text, pages, tables = self._parse_pdfplumber(file_path)
+        else:
+            text, pages, tables = self._parse_fallback(file_path)
 
         # Fallback to pdfplumber if text is too short (likely scanned)
-        if len(text.strip()) < 100:
+        if len(text.strip()) < 100 and HAS_PDFPLUMBER and HAS_FITZ:
             text_pb, pages_pb, tables_pb = self._parse_pdfplumber(file_path)
             if len(text_pb) > len(text):
                 text, pages, tables = text_pb, pages_pb, tables_pb
@@ -134,8 +148,21 @@ class PDFParser:
         finally:
             os.unlink(tmp_path)
 
+    def _parse_fallback(self, file_path: str) -> Tuple[str, int, List[Dict]]:
+        """Fallback when neither PyMuPDF nor pdfplumber is available."""
+        try:
+            with open(file_path, "rb") as f:
+                content = f.read()
+            text_chunks = re.findall(rb"[a-zA-Z0-9\s,.\-:;/()]{4,}", content)
+            text = " ".join(c.decode("latin-1", errors="ignore") for c in text_chunks[:200])
+            return text, 1, []
+        except Exception:
+            return "", 0, []
+
     def _parse_pymupdf(self, file_path: str) -> Tuple[str, int, List[Dict]]:
         """Parse PDF using PyMuPDF."""
+        if not HAS_FITZ:
+            return self._parse_fallback(file_path)
         doc = fitz.open(file_path)
         text_parts = []
         tables = []
@@ -154,6 +181,8 @@ class PDFParser:
 
     def _parse_pdfplumber(self, file_path: str) -> Tuple[str, int, List[Dict]]:
         """Parse PDF using pdfplumber (better for tables and scanned docs)."""
+        if not HAS_PDFPLUMBER:
+            return self._parse_fallback(file_path)
         text_parts = []
         tables = []
 

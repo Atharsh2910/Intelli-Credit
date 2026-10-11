@@ -8,6 +8,12 @@ services:
     startCommand: python -m uvicorn backend.api.main:app --host 0.0.0.0 --port $PORT
 
     envVars:
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_MODEL
+        sync: false
+      - key: SERP_API_KEY
+        sync: false
       - key: OPENAI_API_KEY
         sync: false
       - key: PINECONE_API_KEY

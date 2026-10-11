@@ -13,6 +13,12 @@ from dotenv import load_dotenv
 load_dotenv()
 
 try:
+    from groq import Groq
+    HAS_GROQ = True
+except ImportError:
+    HAS_GROQ = False
+
+try:
     from openai import OpenAI
     HAS_OPENAI = True
 except ImportError:
@@ -20,12 +26,24 @@ except ImportError:
 
 
 class GenAINarrativeGenerator:
-    """Generates executive summary narratives with GenAI."""
+    """Generates executive summary narratives with GenAI (Groq / OpenAI)."""
 
     def __init__(self):
         self.client = None
-        if HAS_OPENAI and os.getenv("OPENAI_API_KEY"):
-            self.client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        self.provider = None
+        self.model = None
+
+        groq_api_key = os.getenv("GROQ_API_KEY")
+        openai_api_key = os.getenv("OPENAI_API_KEY")
+
+        if HAS_GROQ and groq_api_key:
+            self.client = Groq(api_key=groq_api_key)
+            self.provider = "groq"
+            self.model = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b")
+        elif HAS_OPENAI and openai_api_key:
+            self.client = OpenAI(api_key=openai_api_key)
+            self.provider = "openai"
+            self.model = os.getenv("OPENAI_MODEL", "gpt-4o")
 
     def generate(self, agent_analysis: Dict, decision: Dict = None,
                  company_info: Dict = None) -> Dict[str, Any]:
@@ -35,7 +53,7 @@ class GenAINarrativeGenerator:
                 narrative = self._llm_generate(agent_analysis, decision, company_info)
                 return {
                     "narrative": narrative,
-                    "generated_by": "GenAI (GPT-4o)",
+                    "generated_by": f"GenAI ({self.model})",
                     "generated_at": datetime.now().isoformat(),
                 }
             except Exception:
@@ -74,12 +92,16 @@ Use formal financial language. Use ₹ for currency. Write in third person.
 Do NOT use markdown headers or bullet points — write in paragraph form only."""
 
         response = self.client.chat.completions.create(
-            model=os.getenv("OPENAI_MODEL", "gpt-4o"),
+            model=self.model,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.3,
             max_tokens=1200,
         )
-        return response.choices[0].message.content.strip()
+        msg = response.choices[0].message
+        content = (msg.content or "").strip()
+        if not content and hasattr(msg, "reasoning"):
+            content = (getattr(msg, "reasoning") or "").strip()
+        return content
 
     def _template_generate(self, analysis: Dict, decision: Dict = None,
                            company_info: Dict = None) -> str:

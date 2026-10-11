@@ -17,14 +17,24 @@ from dotenv import load_dotenv
 load_dotenv()
 
 try:
+    from langchain_groq import ChatGroq
+    HAS_LANGCHAIN_GROQ = True
+except ImportError:
+    HAS_LANGCHAIN_GROQ = False
+
+try:
     from langchain_openai import ChatOpenAI
+    HAS_LANGCHAIN_OPENAI = True
+except ImportError:
+    HAS_LANGCHAIN_OPENAI = False
+
+try:
     from langchain_classic.agents import AgentExecutor, create_openai_tools_agent
     from langchain_core.tools import Tool
     from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
     HAS_LANGCHAIN = True
 except ImportError:
     try:
-        from langchain_openai import ChatOpenAI
         from langchain.agents import AgentExecutor, create_openai_tools_agent
         from langchain.tools import Tool
         from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -38,16 +48,79 @@ try:
 except ImportError:
     HAS_TAVILY = False
 
+import requests
+
 from backend.rag.document_intelligence import DocumentIntelligence
 from backend.fraud_graph.graph_analytics import FraudGraphAnalyzer
 from backend.ml.credit_model import CashflowForecaster
+
+
+class SerpClient:
+    """Web search client using SerpAPI (Google Search engine)."""
+
+    def __init__(self, api_key: Optional[str] = None):
+        self.api_key = api_key or os.getenv("SERP_API_KEY") or os.getenv("SERPAPI_API_KEY")
+        self.base_url = "https://serpapi.com/search.json"
+
+    def search(self, query: str, max_results: int = 5, include_domains: Optional[List[str]] = None) -> Dict[str, Any]:
+        """Execute a Google search via SerpAPI and return results matching Tavily-like structure."""
+        if not self.api_key:
+            return {"results": []}
+
+        q = query
+        if include_domains:
+            domains_filter = " OR ".join(f"site:{d}" for d in include_domains)
+            q = f"{q} ({domains_filter})"
+
+        params = {
+            "q": q,
+            "api_key": self.api_key,
+            "engine": "google",
+            "num": max(max_results, 3),
+            "hl": "en",
+            "gl": "in",
+        }
+
+        try:
+            resp = requests.get(self.base_url, params=params, timeout=12)
+            if resp.status_code == 200:
+                data = resp.json()
+                items = data.get("organic_results", [])
+                if not items and include_domains:
+                    params["q"] = query
+                    retry_resp = requests.get(self.base_url, params=params, timeout=12)
+                    if retry_resp.status_code == 200:
+                        items = retry_resp.json().get("organic_results", [])
+
+                results = []
+                for item in items[:max_results]:
+                    snippet = item.get("snippet", "")
+                    results.append({
+                        "title": item.get("title", ""),
+                        "url": item.get("link", ""),
+                        "content": snippet,
+                        "snippet": snippet,
+                    })
+                return {"results": results}
+            return {"results": []}
+        except Exception:
+            return {"results": []}
 
 
 class ResearchAgent:
     """Crawls news, checks promoter backgrounds, sector outlook, litigation."""
 
     def __init__(self):
-        self.tavily = TavilyClient(api_key=os.getenv("TAVILY_API_KEY")) if HAS_TAVILY and os.getenv("TAVILY_API_KEY") else None
+        serp_key = os.getenv("SERP_API_KEY") or os.getenv("SERPAPI_API_KEY")
+        if serp_key:
+            self.search_client = SerpClient(api_key=serp_key)
+            self.provider = "serpapi"
+        elif HAS_TAVILY and os.getenv("TAVILY_API_KEY"):
+            self.search_client = TavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
+            self.provider = "tavily"
+        else:
+            self.search_client = None
+            self.provider = None
 
     def research(self, company_name: str, promoter_names: List[str] = None, industry: str = "") -> Dict[str, Any]:
         results = {
@@ -59,15 +132,15 @@ class ResearchAgent:
             "overall_risk": "LOW",
         }
 
-        if not self.tavily:
-            results["note"] = "Web search unavailable — provide TAVILY_API_KEY"
+        if not self.search_client:
+            results["note"] = "Web search unavailable — provide SERP_API_KEY"
             return results
 
         # Company news
         try:
-            news = self.tavily.search(f"{company_name} India corporate news financial", max_results=5)
+            news = self.search_client.search(f"{company_name} India corporate news financial", max_results=5)
             results["company_news"] = [
-                {"title": r.get("title",""), "url": r.get("url",""), "snippet": r.get("content","")[:200]}
+                {"title": r.get("title", ""), "url": r.get("url", ""), "snippet": (r.get("snippet") or r.get("content") or "")[:200]}
                 for r in news.get("results", [])
             ]
         except Exception:
@@ -76,11 +149,13 @@ class ResearchAgent:
         # Promoter background
         for name in (promoter_names or []):
             try:
-                bg = self.tavily.search(f"{name} promoter director India fraud litigation defaulter", max_results=3)
+                bg = self.search_client.search(f"{name} promoter director India fraud litigation defaulter", max_results=3)
                 for r in bg.get("results", []):
                     results["promoter_background"].append({
-                        "promoter": name, "title": r.get("title",""),
-                        "url": r.get("url",""), "snippet": r.get("content","")[:200]
+                        "promoter": name,
+                        "title": r.get("title", ""),
+                        "url": r.get("url", ""),
+                        "snippet": (r.get("snippet") or r.get("content") or "")[:200],
                     })
             except Exception:
                 pass
@@ -88,9 +163,9 @@ class ResearchAgent:
         # Sector outlook
         if industry:
             try:
-                sector = self.tavily.search(f"{industry} India sector outlook 2024 2025 growth", max_results=3)
+                sector = self.search_client.search(f"{industry} India sector outlook 2024 2025 growth", max_results=3)
                 results["sector_outlook"] = [
-                    {"title": r.get("title",""), "snippet": r.get("content","")[:200]}
+                    {"title": r.get("title", ""), "snippet": (r.get("snippet") or r.get("content") or "")[:200]}
                     for r in sector.get("results", [])
                 ]
             except Exception:
@@ -98,10 +173,13 @@ class ResearchAgent:
 
         # Litigation / NCLT / DRT
         try:
-            lit = self.tavily.search(f"{company_name} NCLT DRT litigation court India", max_results=3,
-                                     include_domains=["nclt.gov.in", "drt.gov.in", "indiankanoon.org"])
+            lit = self.search_client.search(
+                f"{company_name} NCLT DRT litigation court India",
+                max_results=3,
+                include_domains=["nclt.gov.in", "drt.gov.in", "indiankanoon.org"]
+            )
             results["litigation_history"] = [
-                {"title": r.get("title",""), "url": r.get("url",""), "snippet": r.get("content","")[:200]}
+                {"title": r.get("title", ""), "url": r.get("url", ""), "snippet": (r.get("snippet") or r.get("content") or "")[:200]}
                 for r in lit.get("results", [])
             ]
         except Exception:
@@ -109,12 +187,15 @@ class ResearchAgent:
 
         # RBI wilful defaulter check
         try:
-            rbi = self.tavily.search(f"{company_name} RBI wilful defaulter", max_results=2)
+            rbi = self.search_client.search(f"{company_name} RBI wilful defaulter", max_results=2)
             for r in rbi.get("results", []):
-                if "wilful" in r.get("content", "").lower() or "defaulter" in r.get("content", "").lower():
+                snippet_text = (r.get("snippet") or r.get("content") or "").lower()
+                title_text = r.get("title", "").lower()
+                if "wilful" in snippet_text or "defaulter" in snippet_text or "wilful" in title_text or "defaulter" in title_text:
                     results["regulatory_flags"].append({
-                        "flag": "WILFUL_DEFAULTER_MENTION", "source": r.get("url",""),
-                        "snippet": r.get("content","")[:200]
+                        "flag": "WILFUL_DEFAULTER_MENTION",
+                        "source": r.get("url", ""),
+                        "snippet": (r.get("snippet") or r.get("content") or "")[:200],
                     })
         except Exception:
             pass
@@ -309,8 +390,16 @@ class CommitteeModerator:
 
     def __init__(self):
         self.llm = None
-        if HAS_LANGCHAIN and os.getenv("OPENAI_API_KEY"):
-            self.llm = ChatOpenAI(model=os.getenv("OPENAI_MODEL", "gpt-4o"), temperature=0.1)
+        groq_api_key = os.getenv("GROQ_API_KEY")
+        openai_api_key = os.getenv("OPENAI_API_KEY")
+
+        if HAS_LANGCHAIN_GROQ and groq_api_key:
+            model = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b")
+            max_tokens = int(os.getenv("GROQ_MAX_TOKENS", "600"))
+            self.llm = ChatGroq(model=model, groq_api_key=groq_api_key, temperature=0.1, max_tokens=max_tokens)
+        elif (HAS_LANGCHAIN or HAS_LANGCHAIN_OPENAI) and openai_api_key:
+            model = os.getenv("OPENAI_MODEL", "gpt-4o")
+            self.llm = ChatOpenAI(model=model, api_key=openai_api_key, temperature=0.1)
 
     def synthesize(self, financial: Dict, research: Dict, risk: Dict,
                    liquidity: Dict, fraud: Dict, company_info: Dict = None) -> Dict[str, Any]:
@@ -439,11 +528,16 @@ Return ONLY valid JSON."""
 
         try:
             response = self.llm.invoke(prompt)
-            content = response.content.strip()
-            if content.startswith("```"):
-                content = content.split("```")[1]
-                if content.startswith("json"):
-                    content = content[4:]
+            content = response.content.strip() if hasattr(response, "content") else str(response).strip()
+            if "```" in content:
+                import re
+                match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", content)
+                if match:
+                    content = match.group(1).strip()
+            start_idx = content.find("{")
+            end_idx = content.rfind("}")
+            if start_idx != -1 and end_idx != -1:
+                content = content[start_idx : end_idx + 1]
             return json.loads(content)
         except Exception:
             return self._rule_synthesis(financial, research, risk, liquidity, fraud, five_cs)

@@ -158,7 +158,7 @@ def create_all_tools():
             name="web_research",
             func=_web_research_func,
             description=(
-                "Conduct web research on a company using Tavily search. "
+                "Conduct web research on a company using SerpAPI search. "
                 "Input: JSON with 'company_name' (str), 'promoter_names' (list of str), 'industry' (str). "
                 "Output: JSON with 'company_news', 'promoter_background', 'sector_outlook', "
                 "'litigation_history', 'regulatory_flags', 'overall_risk' (LOW/MEDIUM/HIGH)."

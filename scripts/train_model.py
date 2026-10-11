@@ -1,9 +1,3 @@
-"""
-Intelli-Credit: Model Training Script
-One-time script to generate synthetic data and train all ML models.
-    python scripts/train_model.py
-"""
-
 import os
 import sys
 import json

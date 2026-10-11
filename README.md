@@ -38,7 +38,7 @@ By integrating multi-agent orchestration with advanced machine learning, the sol
 | **Frontend** | React 18, Vite, Vanilla CSS |
 | **Database** | Pinecone (Vector DB), JSON/File-based storage |
 | **ML Engine** | XGBoost, LightGBM, Random Forest, Prophet |
-| **Logic/Reasoning** | OpenAI GPT-4o, Pydantic, NetworkX |
+| **Logic/Reasoning** | Groq (Llama/Qwen) / OpenAI, Pydantic, NetworkX |
 | **Deployment** | Render (Backend), Vercel (Frontend) |
 
 ---
@@ -145,7 +145,7 @@ Intelli-Credit/
 ### 1. Prerequisites
 *   Python 3.10+ & Node.js 16+
 *   Git installed
-*   API Keys: OpenAI, Pinecone, Tavily
+*   API Keys: Groq, SERP API, Pinecone, OpenAI (optional)
 
 ### 2. Setup Backend
 ```bash
