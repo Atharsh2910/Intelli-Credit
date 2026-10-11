@@ -331,11 +331,17 @@ CIN: {info.get('cin', 'N/A')}
         pdf.set_text_color(40, 40, 40)
         pdf.cell(0, 6, f"Risk Level: {risk.get('risk_level', 'N/A')}  |  Risk Score: {risk.get('risk_score', 'N/A')}/100", ln=True)
 
+        def _clean(t):
+            s = str(t if t is not None else "")
+            for src, dst in [("•", "-"), ("\u2022", "-"), ("₹", "Rs. "), ("—", "-"), ("–", "-"), ("“", '"'), ("”", '"'), ("‘", "'"), ("’", "'")]:
+                s = s.replace(src, dst)
+            return s.encode("latin-1", errors="replace").decode("latin-1")
+
         for rf in risk.get("risk_factors", [])[:5]:
             pdf.set_font("Helvetica", "B", 9)
-            pdf.cell(8, 6, chr(8226))  # Bullet
+            pdf.cell(8, 6, "-")
             pdf.set_font("Helvetica", "", 9)
-            pdf.cell(0, 6, f"[{rf.get('severity', '')}] {rf.get('factor', '')}: {rf.get('detail', '')}", ln=True)
+            pdf.cell(0, 6, _clean(f"[{rf.get('severity', '')}] {rf.get('factor', '')}: {rf.get('detail', '')}"), ln=True)
         pdf.ln(4)
 
         # ── Recommendation ──
@@ -360,7 +366,7 @@ CIN: {info.get('cin', 'N/A')}
             pdf.set_font("Helvetica", "B", 10)
             pdf.cell(50, 7, f"{label}:")
             pdf.set_font("Helvetica", "", 10)
-            pdf.cell(0, 7, str(value), ln=True)
+            pdf.cell(0, 7, _clean(str(value)), ln=True)
         pdf.ln(4)
 
         # ── Covenants ──
@@ -372,7 +378,7 @@ CIN: {info.get('cin', 'N/A')}
             pdf.set_font("Helvetica", "", 9)
             pdf.set_text_color(40, 40, 40)
             for i, cov in enumerate(covenants, 1):
-                pdf.cell(0, 6, f"  {i}. {cov}", ln=True)
+                pdf.cell(0, 6, _clean(f"  {i}. {cov}"), ln=True)
             pdf.ln(4)
 
         # ── SHAP Explanation ──
@@ -384,8 +390,11 @@ CIN: {info.get('cin', 'N/A')}
             pdf.set_font("Helvetica", "", 9)
             pdf.set_text_color(40, 40, 40)
             for s in shap[:8]:
-                direction = "+" if s.get("impact", 0) > 0 else ""
-                pdf.cell(0, 6, f"  {s.get('feature', '')}: {direction}{s.get('impact', 0):.4f} ({s.get('direction', '')})", ln=True)
+                imp = s.get("impact", s.get("importance", 0.0))
+                direction = "+" if imp > 0 else ""
+                feat = s.get("feature", "")
+                dir_label = s.get("direction", "")
+                pdf.cell(0, 6, _clean(f"  {feat}: {direction}{imp:.4f} ({dir_label})"), ln=True)
             pdf.ln(4)
 
         # ── Footer ──
